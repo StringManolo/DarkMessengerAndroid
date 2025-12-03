@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
     webView.webChromeClient = WebChromeClient()
 
     // Cargar la interfaz HTML
-    webView.loadUrl("file:///android_asset/index.html")
+    webView.loadUrl("file:///android_asset/dark-messenger-ui.html")
   }
 
   override fun onBackPressed() {
