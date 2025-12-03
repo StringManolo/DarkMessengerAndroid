@@ -5,55 +5,214 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dark Messenger Android</title>
     <link rel="stylesheet" href="dark-messenger-ui-styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   </head>
   <body>
-    <div class="container">
-      <div class="header">
-        <h1>DarkMessengerAndroid</h1>
-        <div class="subtitle">Secure Communication Interface</div>
-      </div>
-
-      <div class="status-panel">
-        <div class="status-title">
-          <div class="status-indicator"></div>
-          <h2>System Status: ACTIVE</h2>
+    <!-- Sidebar Menu -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="user-info">
+          <div class="user-avatar">
+            <i class="fas fa-user-secret"></i>
+          </div>
+          <div class="user-details">
+            <span id="username">Anonymous</span>
+            <small id="user-onion">placeholder.onion</small>
+          </div>
         </div>
-        <p>Encryption: AES-256 (Enabled)</p>
-        <p>Connection: Secure Tunnel Established</p>
-        <p>Last Update: Just Now</p>
+        <button class="close-sidebar" onclick="closeSidebar()">
+          <i class="fas fa-times"></i>
+        </button>
       </div>
 
-      <div class="control-panel">
-        <button class="control-btn" onclick="testToast()">Test Toast</button>
-        <button class="control-btn" onclick="addLog('System check initiated...')">System Check</button>
-        <button class="control-btn" onclick="addLog('Encryption protocols verified')">Verify Encryption</button>
-        <button class="control-btn" onclick="addLog('Connection stability confirmed')">Check Connection</button>
-        <button class="control-btn" onclick="clearConsole()">Clear Console</button>
-        <button class="control-btn" onclick="showWelcome()">Show Welcome</button>
+      <div class="sidebar-menu">
+        <a href="javascript:void(0)" onclick="showNewChat()">
+          <i class="fas fa-plus-circle"></i> New Chat
+        </a>
+        <a href="javascript:void(0)" onclick="showContacts()">
+          <i class="fas fa-address-book"></i> Contacts
+        </a>
+        <a href="javascript:void(0)" onclick="showSettings()">
+          <i class="fas fa-cog"></i> Settings
+        </a>
+        <a href="javascript:void(0)" onclick="showArchivedChats()">
+          <i class="fas fa-archive"></i> Archived Chats
+        </a>
+        <div class="sidebar-divider"></div>
+        <a href="javascript:void(0)" class="logout" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
       </div>
+    </div>
 
-      <div class="console" id="console">
-        <div class="console-line">
-          <span class="timestamp">[14:00:01]</span>
-          <span class="message"> System initialized...</span>
+    <!-- Overlay for sidebar -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+      <!-- Header -->
+      <header class="app-header">
+        <button class="menu-toggle" onclick="toggleSidebar()">
+          <i class="fas fa-bars"></i>
+        </button>
+        <div class="header-title">
+          <h1>Dark Messenger</h1>
         </div>
-        <div class="console-line">
-          <span class="timestamp">[14:00:02]</span>
-          <span class="message"> DarkMessengerAndroid interface loaded</span>
+        <div class="header-actions">
+          <button class="header-btn" onclick="searchChats()">
+            <i class="fas fa-search"></i>
+          </button>
+          <button class="header-btn" onclick="showNewChat()">
+            <i class="fas fa-edit"></i>
+          </button>
         </div>
-        <div class="console-line">
-          <span class="timestamp">[14:00:03]</span>
-          <span class="message"> JavaScript bridge active</span>
+      </header>
+
+      <!-- Main Content Area -->
+      <main class="main-content" id="mainContent">
+        <!-- Chats List View (default) -->
+        <div class="view active" id="chatsView">
+          <div class="chats-list" id="chatsList">
+            <!-- Chats will be loaded here -->
+          </div>
+        </div>
+
+        <!-- Chat View -->
+        <div class="view" id="chatView">
+          <div class="chat-header">
+            <button class="back-btn" onclick="showChatsView()">
+              <i class="fas fa-arrow-left"></i>
+            </button>
+            <div class="chat-contact-info">
+              <div class="contact-avatar">
+                <i class="fas fa-user-secret"></i>
+              </div>
+              <div>
+                <h3 id="chatContactName">Contact Name</h3>
+                <small id="chatContactStatus">Online</small>
+              </div>
+            </div>
+            <div class="chat-actions">
+              <button class="chat-header-btn" onclick="toggleChatInfo()">
+                <i class="fas fa-info-circle"></i>
+              </button>
+              <button class="chat-header-btn" onclick="showChatMenu()">
+                <i class="fas fa-ellipsis-v"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="chat-messages" id="chatMessages">
+            <!-- Messages will be loaded here -->
+          </div>
+
+          <div class="chat-input-container">
+            <div class="chat-input-actions">
+              <button class="input-action-btn" onclick="attachFile()">
+                <i class="fas fa-paperclip"></i>
+              </button>
+              <button class="input-action-btn" onclick="showEmojiPicker()">
+                <i class="far fa-smile"></i>
+              </button>
+            </div>
+            <input type="text" class="chat-input" id="messageInput" 
+                                                  placeholder="Type a message..." onkeypress="handleMessageInput(event)">
+            <button class="send-btn" onclick="sendMessage()">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- New Chat / Contacts View -->
+        <div class="view" id="contactsView">
+          <div class="view-header">
+            <button class="back-btn" onclick="showChatsView()">
+              <i class="fas fa-arrow-left"></i>
+            </button>
+            <h2 id="contactsViewTitle">Contacts</h2>
+            <button class="header-btn" id="contactsActionBtn" onclick="addNewContact()">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+
+          <div class="contacts-list" id="contactsList">
+            <!-- Contacts will be loaded here -->
+          </div>
+        </div>
+
+        <!-- Settings View -->
+        <div class="view" id="settingsView">
+          <div class="view-header">
+            <button class="back-btn" onclick="showChatsView()">
+              <i class="fas fa-arrow-left"></i>
+            </button>
+            <h2>Settings</h2>
+          </div>
+
+          <div class="settings-container">
+            <!-- Settings will be loaded dynamically -->
+          </div>
+        </div>
+      </main>
+
+      <!-- Floating Action Button -->
+      <button class="fab" onclick="showNewChat()">
+        <i class="fas fa-edit"></i>
+      </button>
+
+      <!-- Toast Notification -->
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal" id="newContactModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>New Contact</h3>
+          <button class="close-modal" onclick="closeModal('newContactModal')">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="contactName">Name</label>
+            <input type="text" id="contactName" class="form-control" placeholder="Enter contact name">
+          </div>
+          <div class="form-group">
+            <label for="contactOnion">Onion Address</label>
+            <input type="text" id="contactOnion" class="form-control" placeholder="Enter .onion address">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('newContactModal')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveContact()">Save Contact</button>
         </div>
       </div>
+    </div>
 
-      <div class="input-group">
-        <input type="text" class="input-field" id="messageInput" placeholder="Type message to display in toast...">
-        <button class="send-btn" onclick="sendCustomToast()">Send Toast</button>
-      </div>
-
-      <div class="footer">
-        DMA v1.0 | Privacy Focus Messaging APP | © 2025 DarkMessengerAndroid
+    <div class="modal" id="editContactModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Edit Contact</h3>
+          <button class="close-modal" onclick="closeModal('editContactModal')">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="editContactName">Name</label>
+            <input type="text" id="editContactName" class="form-control">
+          </div>
+          <div class="form-group">
+            <label for="editContactOnion">Onion Address</label>
+            <input type="text" id="editContactOnion" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('editContactModal')">Cancel</button>
+          <button class="btn btn-primary" onclick="updateContact()">Update Contact</button>
+          <button class="btn btn-danger" onclick="deleteContact()">Delete Contact</button>
+        </div>
       </div>
     </div>
 
