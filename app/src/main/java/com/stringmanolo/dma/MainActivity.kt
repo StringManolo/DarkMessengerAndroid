@@ -14,6 +14,18 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.InputStream
 
+// Data classes fuera de MainActivity para mejor acceso
+data class Contact(
+  val name: String,
+  val onion: String
+)
+
+data class UserData(
+  var username: String,
+  var onionAddress: String,
+  var contacts: List<Contact>
+)
+
 class MainActivity : AppCompatActivity() {
 
   private lateinit var webView: WebView
@@ -103,7 +115,7 @@ class MainActivity : AppCompatActivity() {
 
     @JavascriptInterface
     fun getDefaultContacts(): String {
-      return gson.toJson(defaultDataManager.getDefaultContacts())
+      return gson.toJson(defaultDataManager.getDefaultContactsFull())
     }
 
     @JavascriptInterface
@@ -231,17 +243,6 @@ class MainActivity : AppCompatActivity() {
   private fun showToast(message: String) {
     Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
   }
-
-  data class UserData(
-    var username: String,
-    var onionAddress: String,
-    var contacts: List<Contact>
-  )
-
-  data class Contact(
-    val name: String,
-    val onion: String
-  )
 }
 
 // Gestor de datos por defecto
@@ -250,14 +251,25 @@ class DefaultDataManager(private val context: android.content.Context) {
 
   fun getAllDefaultData(): Map<String, Any> {
     return mapOf(
-      "contacts" to getDefaultContacts(),
+      "contacts" to getDefaultContactsFull(),
       "defaultChats" to getDefaultChats(),
       "defaultMessages" to getDefaultMessages(),
       "settings" to getDefaultSettingsMap()
     )
   }
 
-  fun getDefaultContacts(): List<Map<String, Any>> {
+  // Para UserData (solo name y onion)
+  fun getDefaultContacts(): List<Contact> {
+    return getDefaultContactsFull().map { map ->
+      Contact(
+        name = map["name"] as String,
+        onion = map["onion"] as String
+      )
+    }
+  }
+
+  // Para JavaScript (todos los campos)
+  fun getDefaultContactsFull(): List<Map<String, Any>> {
     return try {
       val json = loadAssetFile("data/default_contacts.json")
       val jsonArray = JSONArray(json)
