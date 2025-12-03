@@ -1,0 +1,11 @@
+{
+  "1": [
+    {
+      "id": 1,
+      "senderId": 0,
+      "text": "Welcome to DarkMessenger. I am the app developer, you can chat with me for any questions about the app.",
+      "timestamp": "",
+      "incoming": true
+    }
+  ]
+}
