@@ -162,18 +162,18 @@ class MainActivity : AppCompatActivity() {
           val settings = gson.fromJson(settingsJson, Map::class.java)
 
           // Extraer username y onion si están presentes
-          val general = settings["darkmessenger"] as? Map<*, *>
-          val generalSettings = general?.get("general") as? Map<*, *>
+          val darkmessenger = settings["darkmessenger"] as? Map<*, *>
+          val general = darkmessenger?.get("general") as? Map<*, *>
 
-          val username = generalSettings?.get("username") as? Map<*, *>
-          val onionAddress = generalSettings?.get("onionAddress") as? Map<*, *>
+          val usernameObj = general?.get("username") as? Map<*, *>
+          val onionAddressObj = general?.get("onionAddress") as? Map<*, *>
 
-          if (username != null) {
-            userData = userData.copy(username = username["value"] as? String ?: userData.username)
+          if (usernameObj != null) {
+            userData = userData.copy(username = usernameObj["value"] as? String ?: userData.username)
           }
 
-          if (onionAddress != null) {
-            userData = userData.copy(onionAddress = onionAddress["value"] as? String ?: userData.onionAddress)
+          if (onionAddressObj != null) {
+            userData = userData.copy(onionAddress = onionAddressObj["value"] as? String ?: userData.onionAddress)
           }
 
           saveSettingsToStorage(settingsJson)
@@ -246,32 +246,43 @@ class MainActivity : AppCompatActivity() {
 
 // Gestor de datos por defecto
 class DefaultDataManager(private val context: android.content.Context) {
+  private val gson = Gson()
 
   fun getAllDefaultData(): Map<String, Any> {
     return mapOf(
       "contacts" to getDefaultContacts(),
-      "chats" to getDefaultChats(),
-      "settings" to JSONObject(getDefaultSettingsJson()).toMap()
+      "defaultChats" to getDefaultChats(),
+      "defaultMessages" to getDefaultMessages(),
+      "settings" to getDefaultSettingsMap()
     )
   }
 
-  fun getDefaultContacts(): List<MainActivity.Contact> {
+  fun getDefaultContacts(): List<Map<String, Any>> {
     return try {
       val json = loadAssetFile("data/default_contacts.json")
       val jsonArray = JSONArray(json)
+      val contacts = mutableListOf<Map<String, Any>>()
 
-      jsonArray.mapIndexed { index, item ->
-        val obj = item as JSONObject
-        MainActivity.Contact(
-          name = obj.getString("name"),
-          onion = obj.getString("onion")
-        )
+      for (i in 0 until jsonArray.length()) {
+        val obj = jsonArray.getJSONObject(i)
+        contacts.add(mapOf(
+          "id" to obj.getInt("id"),
+          "name" to obj.getString("name"),
+          "onion" to obj.getString("onion"),
+          "status" to obj.getString("status")
+        ))
       }
+      contacts
     } catch (e: Exception) {
       e.printStackTrace()
       // Fallback básico
       listOf(
-        MainActivity.Contact("StringManolo", "placeholder.onion")
+        mapOf(
+          "id" to 0,
+          "name" to "StringManolo",
+          "onion" to "placeholder.onion",
+          "status" to "Online"
+        )
       )
     }
   }
@@ -280,19 +291,60 @@ class DefaultDataManager(private val context: android.content.Context) {
     return try {
       val json = loadAssetFile("data/default_chats.json")
       val jsonArray = JSONArray(json)
+      val chats = mutableListOf<Map<String, Any>>()
 
-      jsonArray.map { item ->
-        val obj = item as JSONObject
-        mapOf(
+      for (i in 0 until jsonArray.length()) {
+        val obj = jsonArray.getJSONObject(i)
+        chats.add(mapOf(
           "id" to obj.getInt("id"),
           "contactId" to obj.getInt("contactId"),
           "lastMessage" to obj.getString("lastMessage"),
           "unread" to obj.getBoolean("unread")
-        )
+        ))
       }
+      chats
     } catch (e: Exception) {
       e.printStackTrace()
       emptyList()
+    }
+  }
+
+  fun getDefaultMessages(): Map<String, List<Map<String, Any>>> {
+    return try {
+      val json = loadAssetFile("data/default_messages.json")
+      val jsonObj = JSONObject(json)
+      val messages = mutableMapOf<String, List<Map<String, Any>>>()
+      val keys = jsonObj.keys()
+
+      while (keys.hasNext()) {
+        val key = keys.next()
+        val jsonArray = jsonObj.getJSONArray(key)
+        val messageList = mutableListOf<Map<String, Any>>()
+
+        for (i in 0 until jsonArray.length()) {
+          val obj = jsonArray.getJSONObject(i)
+          messageList.add(mapOf(
+            "id" to obj.getInt("id"),
+            "senderId" to obj.getInt("senderId"),
+            "text" to obj.getString("text"),
+            "incoming" to obj.getBoolean("incoming")
+          ))
+        }
+        messages[key] = messageList
+      }
+      messages
+    } catch (e: Exception) {
+      e.printStackTrace()
+      mapOf(
+        "1" to listOf(
+          mapOf(
+            "id" to 1,
+            "senderId" to 0,
+            "text" to "Welcome to DarkMessenger. I am the app developer, you can chat with me for any questions about the app.",
+            "incoming" to true
+          )
+        )
+      )
     }
   }
 
@@ -302,6 +354,17 @@ class DefaultDataManager(private val context: android.content.Context) {
     } catch (e: Exception) {
       e.printStackTrace()
       "{}"
+    }
+  }
+
+  fun getDefaultSettingsMap(): Map<String, Any> {
+    return try {
+      val json = loadAssetFile("data/default_settings.json")
+      val jsonObj = JSONObject(json)
+      convertJsonToMap(jsonObj)
+    } catch (e: Exception) {
+      e.printStackTrace()
+      emptyMap()
     }
   }
 
@@ -325,5 +388,39 @@ class DefaultDataManager(private val context: android.content.Context) {
     inputStream.read(buffer)
     inputStream.close()
     return String(buffer, Charsets.UTF_8)
+  }
+
+  private fun convertJsonToMap(jsonObj: JSONObject): Map<String, Any> {
+    val map = mutableMapOf<String, Any>()
+    val keys = jsonObj.keys()
+
+    while (keys.hasNext()) {
+      val key = keys.next()
+      val value = jsonObj.get(key)
+
+      when (value) {
+        is JSONObject -> map[key] = convertJsonToMap(value)
+        is JSONArray -> map[key] = convertJsonArrayToList(value)
+        else -> map[key] = value
+      }
+    }
+
+    return map
+  }
+
+  private fun convertJsonArrayToList(jsonArray: JSONArray): List<Any> {
+    val list = mutableListOf<Any>()
+
+    for (i in 0 until jsonArray.length()) {
+      val value = jsonArray.get(i)
+
+      when (value) {
+        is JSONObject -> list.add(convertJsonToMap(value))
+        is JSONArray -> list.add(convertJsonArrayToList(value))
+        else -> list.add(value)
+      }
+    }
+
+    return list
   }
 }
