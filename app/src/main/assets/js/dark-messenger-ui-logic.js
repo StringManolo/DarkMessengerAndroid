@@ -99,7 +99,7 @@ class DarkMessengerApp {
 
   async init() {
     // Cargar datos del usuario desde Kotlin
-    await this.loadUserData();
+    // await this.loadUserData();
 
     // Cargar vistas iniciales
     this.loadChats();
