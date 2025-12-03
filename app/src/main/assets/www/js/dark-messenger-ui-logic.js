@@ -16,23 +16,34 @@ class DarkMessengerApp {
   }
 
   async init() {
-    // Cargar datos por defecto desde Kotlin
-    await this.loadDefaultData();
+    try {
+      // Cargar datos por defecto desde Kotlin
+      await this.loadDefaultData();
 
-    // Cargar datos del usuario desde Kotlin
-    await this.loadUserData();
+      // Cargar datos del usuario desde Kotlin
+      await this.loadUserData();
 
-    // Cargar configuraciones desde Kotlin
-    await this.loadSettings();
+      // Cargar configuraciones desde Kotlin
+      await this.loadSettings();
 
-    // Cargar vistas iniciales
-    this.loadChats();
-    this.loadContacts();
+      // Cargar chats guardados
+      await this.loadSavedChats();
 
-    // Mostrar toast de bienvenida
-    setTimeout(() => {
-      this.showToast("Dark Messenger Started");
-    }, 1000);
+      // Cargar mensajes guardados
+      await this.loadSavedMessages();
+
+      // Cargar vistas iniciales
+      this.loadChats();
+      this.loadContacts();
+
+      // Mostrar toast de bienvenida
+      setTimeout(() => {
+        this.showToast("Dark Messenger Started");
+      }, 1000);
+    } catch (error) {
+      console.error("Error initializing app:", error);
+      this.showToast("Error initializing app");
+    }
   }
 
   async loadDefaultData() {
@@ -50,32 +61,61 @@ class DarkMessengerApp {
           }));
         }
         
-        // Cargar chats por defecto
+        // Si no hay contactos guardados, usar los por defecto para chats
         if (defaultData.defaultChats && defaultData.defaultChats.length > 0) {
-          this.chats = defaultData.defaultChats.map(chat => ({
-            id: chat.id,
-            contactId: chat.contactId,
-            lastMessage: chat.lastMessage,
-            timestamp: chat.timestamp || new Date().toISOString(),
-            unread: chat.unread || false
-          }));
+          // Solo usar chats por defecto si no hay chats guardados
+          if (this.chats.length === 0) {
+            this.chats = defaultData.defaultChats.map(chat => ({
+              id: chat.id,
+              contactId: chat.contactId,
+              lastMessage: chat.lastMessage,
+              timestamp: chat.timestamp || new Date().toISOString(),
+              unread: chat.unread || false
+            }));
+          }
         }
         
         // Cargar mensajes por defecto
         if (defaultData.defaultMessages) {
-          // Asegurarse de que los mensajes tengan timestamp si no lo tienen
-          Object.keys(defaultData.defaultMessages).forEach(chatId => {
-            this.messages[chatId] = defaultData.defaultMessages[chatId].map(msg => ({
-              ...msg,
-              timestamp: msg.timestamp || new Date(Date.now() - 3600000).toISOString()
-            }));
-          });
+          // Solo usar mensajes por defecto si no hay mensajes guardados
+          if (Object.keys(this.messages).length === 0) {
+            Object.keys(defaultData.defaultMessages).forEach(chatId => {
+              this.messages[chatId] = defaultData.defaultMessages[chatId].map(msg => ({
+                ...msg,
+                timestamp: msg.timestamp || new Date(Date.now() - 3600000).toISOString()
+              }));
+            });
+          }
         }
       }
     } catch (error) {
       console.error("Error loading default data from Kotlin:", error);
-      // Si falla la carga, dejar estructuras vacías
-      this.showToast("Error loading default data");
+    }
+  }
+
+  async loadSavedChats() {
+    try {
+      if (window.dma && dma.getChats) {
+        const savedChats = JSON.parse(dma.getChats());
+        if (savedChats && Array.isArray(savedChats) && savedChats.length > 0) {
+          this.chats = savedChats;
+        }
+      }
+    } catch (error) {
+      console.error("Error loading saved chats:", error);
+    }
+  }
+
+  async loadSavedMessages() {
+    try {
+      if (window.dma && dma.getMessages) {
+        const savedMessages = JSON.parse(dma.getMessages());
+        if (savedMessages && typeof savedMessages === 'object') {
+          this.messages = savedMessages;
+        }
+      }
+    } catch (error) {
+      console.error("Error loading saved messages:", error);
     }
   }
 
@@ -93,19 +133,23 @@ class DarkMessengerApp {
           document.getElementById('user-onion').textContent = data.onionAddress;
         }
 
-        // Si el usuario tiene contactos guardados, usarlos (sobrescribiendo los por defecto)
+        // Si el usuario tiene contactos guardados, usarlos
         if (data.contacts && data.contacts.length > 0) {
-          this.contacts = data.contacts.map((contact, index) => ({
-            id: index,
-            name: contact.name,
-            onion: contact.onion,
-            status: "Online" // TODO: Obtener estado real
-          }));
+          // Actualizar contactos pero mantener IDs
+          this.contacts = data.contacts.map((contact, index) => {
+            // Buscar si ya existe un contacto con este nombre
+            const existingContact = this.contacts.find(c => c.name === contact.name);
+            return {
+              id: existingContact ? existingContact.id : index,
+              name: contact.name,
+              onion: contact.onion,
+              status: "Online"
+            };
+          });
         }
       }
     } catch (error) {
       console.error("Error loading user data from Kotlin:", error);
-      this.showToast("Error loading user data");
     }
   }
 
@@ -126,6 +170,28 @@ class DarkMessengerApp {
     } catch (error) {
       console.error("Error loading settings from Kotlin:", error);
       this.showToast("Error loading settings");
+    }
+  }
+
+  async saveChats() {
+    if (window.dma && dma.saveChats) {
+      try {
+        const jsonData = JSON.stringify(this.chats);
+        dma.saveChats(jsonData);
+      } catch (error) {
+        console.error("Error saving chats:", error);
+      }
+    }
+  }
+
+  async saveMessages() {
+    if (window.dma && dma.saveMessages) {
+      try {
+        const jsonData = JSON.stringify(this.messages);
+        dma.saveMessages(jsonData);
+      } catch (error) {
+        console.error("Error saving messages:", error);
+      }
     }
   }
 
@@ -184,7 +250,7 @@ class DarkMessengerApp {
 
   showSettingsView() {
     this.showView('settingsView');
-    this.loadSettings();
+    this.loadSettingsUI();
   }
 
   showNewChat() {
@@ -211,7 +277,12 @@ class DarkMessengerApp {
     const chatsList = document.getElementById('chatsList');
     chatsList.innerHTML = '';
 
-    this.chats.forEach(chat => {
+    // Ordenar chats por timestamp (más reciente primero)
+    const sortedChats = [...this.chats].sort((a, b) => 
+      new Date(b.timestamp) - new Date(a.timestamp)
+    );
+
+    sortedChats.forEach(chat => {
       const contact = this.contacts.find(c => c.id === chat.contactId);
       if (!contact) return;
 
@@ -270,6 +341,7 @@ class DarkMessengerApp {
     if (chat) {
       chat.unread = false;
       this.loadChats();
+      this.saveChats();
     }
   }
 
@@ -326,6 +398,10 @@ class DarkMessengerApp {
       };
       this.chats.push(existingChat);
       this.messages[newChatId] = [];
+      
+      // Guardar chats y mensajes
+      this.saveChats();
+      this.saveMessages();
     }
 
     this.showChatView(existingChat.id);
@@ -347,8 +423,15 @@ class DarkMessengerApp {
       return;
     }
 
+    // Verificar si el contacto ya existe
+    const existingContact = this.contacts.find(c => c.name === name || c.onion === onion);
+    if (existingContact) {
+      this.showToast('Contact already exists');
+      return;
+    }
+
     const newContact = {
-      id: Math.max(...this.contacts.map(c => c.id), 0) + 1,
+      id: Math.max(...this.contacts.map(c => c.id), -1) + 1,
       name: name,
       onion: onion,
       status: "Online"
@@ -418,24 +501,35 @@ class DarkMessengerApp {
 
   async saveContactsToKotlin() {
     if (window.dma && dma.updateContacts) {
-      const contactsData = this.contacts.map(contact => ({
-        name: contact.name,
-        onion: contact.onion
-      }));
+      try {
+        const contactsData = this.contacts.map(contact => ({
+          name: contact.name,
+          onion: contact.onion
+        }));
 
-      const jsonData = JSON.stringify({ contacts: contactsData });
-      dma.updateContacts(jsonData);
+        const jsonData = JSON.stringify(contactsData);
+        dma.updateContacts(jsonData);
+      } catch (error) {
+        console.error("Error saving contacts:", error);
+      }
     }
   }
 
-  // Settings
-  loadSettings() {
+  // Settings UI
+  loadSettingsUI() {
     const container = document.querySelector('.settings-container');
     container.innerHTML = '';
 
     // Verificar si hay configuraciones cargadas
-    if (Object.keys(this.settings).length === 0) {
-      container.innerHTML = '<p>Loading settings...</p>';
+    if (!this.settings || Object.keys(this.settings).length === 0) {
+      container.innerHTML = `
+        <div class="loading-settings">
+          <p>Loading settings...</p>
+          <button class="btn btn-secondary" onclick="app.retryLoadSettings()">
+            Retry
+          </button>
+        </div>
+      `;
       return;
     }
 
@@ -455,6 +549,11 @@ class DarkMessengerApp {
     saveButton.textContent = 'Save All Settings';
     saveButton.onclick = () => this.saveSettings();
     container.appendChild(saveButton);
+  }
+
+  async retryLoadSettings() {
+    await this.loadSettings();
+    this.loadSettingsUI();
   }
 
   createSettingsSection(title, sectionKey) {
@@ -567,16 +666,21 @@ class DarkMessengerApp {
   }
 
   async saveSettings() {
-    // Actualizar settings desde los inputs
-    this.updateSettingsFromUI();
+    try {
+      // Actualizar settings desde los inputs
+      this.updateSettingsFromUI();
 
-    // Guardar en Kotlin
-    if (window.dma && dma.updateSettings) {
-      const jsonData = JSON.stringify(this.settings);
-      dma.updateSettings(jsonData);
+      // Guardar en Kotlin
+      if (window.dma && dma.updateSettings) {
+        const jsonData = JSON.stringify(this.settings);
+        dma.updateSettings(jsonData);
+      }
+
+      this.showToast('Settings saved successfully');
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      this.showToast('Error saving settings');
     }
-
-    this.showToast('Settings saved successfully');
   }
 
   updateSettingsFromUI() {
@@ -632,6 +736,7 @@ class DarkMessengerApp {
     if (chat) {
       chat.lastMessage = text;
       chat.timestamp = new Date().toISOString();
+      chat.unread = false;
     }
 
     // Limpiar input y recargar
@@ -639,10 +744,12 @@ class DarkMessengerApp {
     this.loadMessages(this.currentChat);
     this.loadChats();
 
-    // Enviar a través de DMA (simulado por ahora)
-    if (window.dma && dma.toast) {
-      dma.toast(`Message sent to chat ${this.currentChat}`);
-    }
+    // Guardar chats y mensajes
+    this.saveChats();
+    this.saveMessages();
+
+    // Solo mostrar toast de JS
+    this.showToast('Message sent');
   }
 
   handleMessageInput(event) {
@@ -661,11 +768,6 @@ class DarkMessengerApp {
     setTimeout(() => {
       toast.classList.remove('show');
     }, 3000);
-
-    // También mostrar toast nativo
-    /*if (window.dma && dma.toast) {
-      dma.toast(message);
-    }*/
   }
 
   showModal(modalId) {
@@ -725,9 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Mostrar toast inicial
   setTimeout(() => {
-    if (window.dma && dma.toast) {
-      dma.toast("Dark Messenger Interface Loaded");
-    }
+    app.showToast("Dark Messenger Interface Loaded");
   }, 500);
 });
 

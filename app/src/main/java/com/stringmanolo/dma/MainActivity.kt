@@ -9,12 +9,12 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
+import com.google.gson.reflect.TypeToken
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.InputStream
 
-// Data classes fuera de MainActivity para mejor acceso
+// Data classes
 data class Contact(
   val name: String,
   val onion: String
@@ -24,6 +24,22 @@ data class UserData(
   var username: String,
   var onionAddress: String,
   var contacts: List<Contact>
+)
+
+data class Chat(
+  val id: Int,
+  val contactId: Int,
+  val lastMessage: String,
+  val timestamp: String,
+  val unread: Boolean
+)
+
+data class Message(
+  val id: Long,
+  val senderId: Int?,
+  val text: String,
+  val timestamp: String,
+  val incoming: Boolean
 )
 
 class MainActivity : AppCompatActivity() {
@@ -52,6 +68,7 @@ class MainActivity : AppCompatActivity() {
   private fun setupWebView() {
     webView.settings.javaScriptEnabled = true
     webView.settings.domStorageEnabled = true
+    webView.settings.allowFileAccess = true
 
     webView.addJavascriptInterface(WebAppInterface(), "dma")
 
@@ -85,8 +102,8 @@ class MainActivity : AppCompatActivity() {
     // Cargar contactos (guardados o por defecto)
     val contacts = if (savedContacts != null) {
       try {
-        val contactsData = gson.fromJson(savedContacts, Array<Contact>::class.java)
-        contactsData.toList()
+        val type = object : TypeToken<List<Contact>>() {}.type
+        gson.fromJson(savedContacts, type)
       } catch (e: Exception) {
         defaultDataManager.getDefaultContacts()
       }
@@ -145,22 +162,12 @@ class MainActivity : AppCompatActivity() {
     fun updateContacts(contactsJson: String) {
       runOnUiThread {
         try {
-          val contactsList = gson.fromJson(contactsJson, Map::class.java)
-          val contacts = contactsList["contacts"] as? List<*>
+          val type = object : TypeToken<List<Contact>>() {}.type
+          val newContacts = gson.fromJson<List<Contact>>(contactsJson, type)
 
-          if (contacts != null) {
-            val newContacts = contacts.map { contactMap ->
-              val map = contactMap as Map<*, *>
-              Contact(
-                name = map["name"] as? String ?: "",
-                onion = map["onion"] as? String ?: ""
-              )
-            }
-
-            userData = userData.copy(contacts = newContacts)
-            saveContactsToStorage(gson.toJson(newContacts))
-            showToast("Contacts updated")
-          }
+          userData = userData.copy(contacts = newContacts)
+          saveContactsToStorage(contactsJson)
+          showToast("Contacts updated")
         } catch (e: Exception) {
           showToast("Error updating contacts: ${e.message}")
         }
@@ -171,30 +178,71 @@ class MainActivity : AppCompatActivity() {
     fun updateSettings(settingsJson: String) {
       runOnUiThread {
         try {
-          val settings = gson.fromJson(settingsJson, Map::class.java)
-
-          // Extraer username y onion si están presentes
-          val darkmessenger = settings["darkmessenger"] as? Map<*, *>
-          val general = darkmessenger?.get("general") as? Map<*, *>
-
-          val usernameObj = general?.get("username") as? Map<*, *>
-          val onionAddressObj = general?.get("onionAddress") as? Map<*, *>
-
-          if (usernameObj != null) {
-            userData = userData.copy(username = usernameObj["value"] as? String ?: userData.username)
-          }
-
-          if (onionAddressObj != null) {
-            userData = userData.copy(onionAddress = onionAddressObj["value"] as? String ?: userData.onionAddress)
-          }
-
           saveSettingsToStorage(settingsJson)
-          saveUserInfoToStorage()
+
+          // Parsear settings para extraer username y onion
+          try {
+            val settings = gson.fromJson(settingsJson, Map::class.java)
+            val darkmessenger = settings["darkmessenger"] as? Map<*, *>
+            val general = darkmessenger?.get("general") as? Map<*, *>
+
+            val usernameObj = general?.get("username") as? Map<*, *>
+            val onionAddressObj = general?.get("onionAddress") as? Map<*, *>
+
+            if (usernameObj != null) {
+              userData = userData.copy(username = usernameObj["value"] as? String ?: userData.username)
+            }
+
+            if (onionAddressObj != null) {
+              userData = userData.copy(onionAddress = onionAddressObj["value"] as? String ?: userData.onionAddress)
+            }
+
+            saveUserInfoToStorage()
+          } catch (e: Exception) {
+            // Ignorar error de parseo, solo guardar settings
+          }
+
           showToast("Settings saved")
         } catch (e: Exception) {
           showToast("Error saving settings: ${e.message}")
         }
       }
+    }
+
+    @JavascriptInterface
+    fun saveChats(chatsJson: String) {
+      runOnUiThread {
+        try {
+          val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+          sharedPref.edit().putString("chats", chatsJson).apply()
+        } catch (e: Exception) {
+          showToast("Error saving chats: ${e.message}")
+        }
+      }
+    }
+
+    @JavascriptInterface
+    fun getChats(): String {
+      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+      return sharedPref.getString("chats", "[]") ?: "[]"
+    }
+
+    @JavascriptInterface
+    fun saveMessages(messagesJson: String) {
+      runOnUiThread {
+        try {
+          val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+          sharedPref.edit().putString("messages", messagesJson).apply()
+        } catch (e: Exception) {
+          showToast("Error saving messages: ${e.message}")
+        }
+      }
+    }
+
+    @JavascriptInterface
+    fun getMessages(): String {
+      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+      return sharedPref.getString("messages", "{}") ?: "{}"
     }
 
     @JavascriptInterface
@@ -247,7 +295,6 @@ class MainActivity : AppCompatActivity() {
 
 // Gestor de datos por defecto
 class DefaultDataManager(private val context: android.content.Context) {
-  private val gson = Gson()
 
   fun getAllDefaultData(): Map<String, Any> {
     return mapOf(
@@ -281,7 +328,7 @@ class DefaultDataManager(private val context: android.content.Context) {
           "id" to obj.getInt("id"),
           "name" to obj.getString("name"),
           "onion" to obj.getString("onion"),
-          "status" to obj.getString("status")
+          "status" to obj.optString("status", "Online")
         ))
       }
       contacts
@@ -311,7 +358,8 @@ class DefaultDataManager(private val context: android.content.Context) {
           "id" to obj.getInt("id"),
           "contactId" to obj.getInt("contactId"),
           "lastMessage" to obj.getString("lastMessage"),
-          "unread" to obj.getBoolean("unread")
+          "unread" to obj.getBoolean("unread"),
+          "timestamp" to obj.optString("timestamp", "")
         ))
       }
       chats
@@ -339,7 +387,8 @@ class DefaultDataManager(private val context: android.content.Context) {
             "id" to obj.getInt("id"),
             "senderId" to obj.getInt("senderId"),
             "text" to obj.getString("text"),
-            "incoming" to obj.getBoolean("incoming")
+            "incoming" to obj.getBoolean("incoming"),
+            "timestamp" to obj.optString("timestamp", "")
           ))
         }
         messages[key] = messageList
@@ -347,13 +396,15 @@ class DefaultDataManager(private val context: android.content.Context) {
       messages
     } catch (e: Exception) {
       e.printStackTrace()
+      // Mensaje por defecto
       mapOf(
         "1" to listOf(
           mapOf(
             "id" to 1,
             "senderId" to 0,
             "text" to "Welcome to DarkMessenger. I am the app developer, you can chat with me for any questions about the app.",
-            "incoming" to true
+            "incoming" to true,
+            "timestamp" to ""
           )
         )
       )
@@ -365,13 +416,22 @@ class DefaultDataManager(private val context: android.content.Context) {
       loadAssetFile("data/default_settings.json")
     } catch (e: Exception) {
       e.printStackTrace()
-      "{}"
+      // JSON de settings por defecto mínimo
+      """{
+        "darkmessenger": {
+          "general": {
+            "username": {"value": "Anonymous", "default": "Anonymous", "type": "text"},
+            "onionAddress": {"value": "placeholder.onion", "default": "placeholder.onion", "type": "text"}
+          }
+        },
+        "torrc": {}
+      }"""
     }
   }
 
   fun getDefaultSettingsMap(): Map<String, Any> {
     return try {
-      val json = loadAssetFile("data/default_settings.json")
+      val json = getDefaultSettingsJson()
       val jsonObj = JSONObject(json)
       convertJsonToMap(jsonObj)
     } catch (e: Exception) {
@@ -382,7 +442,7 @@ class DefaultDataManager(private val context: android.content.Context) {
 
   fun getDefaultOnionAddress(): String {
     return try {
-      val json = loadAssetFile("data/default_settings.json")
+      val json = getDefaultSettingsJson()
       val jsonObj = JSONObject(json)
       val darkmessenger = jsonObj.getJSONObject("darkmessenger")
       val general = darkmessenger.getJSONObject("general")
@@ -394,12 +454,17 @@ class DefaultDataManager(private val context: android.content.Context) {
   }
 
   private fun loadAssetFile(fileName: String): String {
-    val inputStream: InputStream = context.assets.open(fileName)
-    val size = inputStream.available()
-    val buffer = ByteArray(size)
-    inputStream.read(buffer)
-    inputStream.close()
-    return String(buffer, Charsets.UTF_8)
+    return try {
+      val inputStream: InputStream = context.assets.open(fileName)
+      val size = inputStream.available()
+      val buffer = ByteArray(size)
+      inputStream.read(buffer)
+      inputStream.close()
+      String(buffer, Charsets.UTF_8)
+    } catch (e: Exception) {
+      e.printStackTrace()
+      ""
+    }
   }
 
   private fun convertJsonToMap(jsonObj: JSONObject): Map<String, Any> {
