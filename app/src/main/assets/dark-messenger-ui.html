@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dark Messenger Android</title>
+    <link rel="stylesheet" href="dark-messenger-ui-styles.css">
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>DarkMessengerAndroid</h1>
+        <div class="subtitle">Secure Communication Interface</div>
+      </div>
+
+      <div class="status-panel">
+        <div class="status-title">
+          <div class="status-indicator"></div>
+          <h2>System Status: ACTIVE</h2>
+        </div>
+        <p>Encryption: AES-256 (Enabled)</p>
+        <p>Connection: Secure Tunnel Established</p>
+        <p>Last Update: Just Now</p>
+      </div>
+
+      <div class="control-panel">
+        <button class="control-btn" onclick="testToast()">Test Toast</button>
+        <button class="control-btn" onclick="addLog('System check initiated...')">System Check</button>
+        <button class="control-btn" onclick="addLog('Encryption protocols verified')">Verify Encryption</button>
+        <button class="control-btn" onclick="addLog('Connection stability confirmed')">Check Connection</button>
+        <button class="control-btn" onclick="clearConsole()">Clear Console</button>
+        <button class="control-btn" onclick="showWelcome()">Show Welcome</button>
+      </div>
+
+      <div class="console" id="console">
+        <div class="console-line">
+          <span class="timestamp">[14:00:01]</span>
+          <span class="message"> System initialized...</span>
+        </div>
+        <div class="console-line">
+          <span class="timestamp">[14:00:02]</span>
+          <span class="message"> DarkMessengerAndroid interface loaded</span>
+        </div>
+        <div class="console-line">
+          <span class="timestamp">[14:00:03]</span>
+          <span class="message"> JavaScript bridge active</span>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <input type="text" class="input-field" id="messageInput" placeholder="Type message to display in toast...">
+        <button class="send-btn" onclick="sendCustomToast()">Send Toast</button>
+      </div>
+
+      <div class="footer">
+        DMA v1.0 | Privacy Focus Messaging APP | © 2025 DarkMessengerAndroid
+      </div>
+    </div>
+
+    <script src="dark-messenger-ui-logic.js"></script>
+  </body>
+</html>
