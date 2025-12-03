@@ -1,5 +1,3 @@
-A clean, base template for Android development in Kotlin. Start coding now!
-You can make your own apps using this code!
-
+DarkMessengerAndroid is a message app based on a unique approach to leverage privacy, freedom and security.
 
 

@@ -1,1 +1,1 @@
-HelloWorld: Example APP Showcase Kotlin APK Template 
+DarkMessengerAndroid: A privacy oriented messaging app.
