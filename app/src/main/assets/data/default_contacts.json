@@ -1,0 +1,20 @@
+[
+  {
+    "id": 0,
+    "name": "StringManolo",
+    "onion": "placeholder.onion",
+    "status": "Online"
+  },
+  {
+    "id": 1,
+    "name": "Alice",
+    "onion": "alice123.onion",
+    "status": "Offline"
+  },
+  {
+    "id": 2,
+    "name": "Bob",
+    "onion": "bob456.onion",
+    "status": "Online"
+  }
+]

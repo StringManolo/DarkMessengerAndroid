@@ -6,100 +6,24 @@ class DarkMessengerApp {
     this.editingContactIndex = null;
     this.userData = null;
 
-    // Datos de ejemplo
-    this.chats = [
-      {
-        id: 1,
-        contactId: 0,
-        lastMessage: "Welcome to DarkMessenger. I am the app developer, you can chat with me for any questions about the app.",
-        timestamp: new Date().toISOString(),
-        unread: true
-      }
-    ];
-
-    this.contacts = [
-      {
-        id: 0,
-        name: "StringManolo",
-        onion: "placeholder.onion",
-        status: "Online"
-      },
-      {
-        id: 1,
-        name: "Alice",
-        onion: "alice123.onion",
-        status: "Offline"
-      },
-      {
-        id: 2,
-        name: "Bob",
-        onion: "bob456.onion",
-        status: "Online"
-      }
-    ];
-
-    this.messages = {
-      1: [
-        {
-          id: 1,
-          senderId: 0,
-          text: "Welcome to DarkMessenger. I am the app developer, you can chat with me for any questions about the app.",
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          incoming: true
-        }
-      ]
-    };
-
-    this.settings = {
-      darkmessenger: {
-        general: {
-          username: { value: null, default: null, type: 'text' },
-          onionAddress: { value: "placeholder.onion", default: "placeholder.onion", type: 'text' },
-          allowAddMe: { value: true, default: true, type: 'toggle' },
-          addBack: { value: true, default: true, type: 'toggle' },
-          alertOnNewMessages: { value: true, default: true, type: 'toggle' },
-          checkNewMessagesSeconds: { value: 20, default: 20, type: 'number' },
-          verbose: { value: true, default: true, type: 'toggle' },
-          debug: { value: true, default: true, type: 'toggle' },
-          debugWithTime: { value: true, default: true, type: 'toggle' }
-        },
-        cryptography: {
-          useERK: { value: false, default: false, type: 'toggle' },
-          offlineMessages: {
-            ecies: { value: true, default: true, type: 'toggle' },
-            rsa: { value: true, default: true, type: 'toggle' },
-            crystalKyber: { value: true, default: true, type: 'toggle' }
-          },
-          onlineMessages: {
-            ecies: { value: true, default: true, type: 'toggle' },
-            rsa: { value: true, default: true, type: 'toggle' },
-            crystalKyber: { value: true, default: true, type: 'toggle' }
-          },
-          addMe: {
-            ecies: { value: true, default: true, type: 'toggle' },
-            rsa: { value: true, default: true, type: 'toggle' },
-            crystalKyber: { value: true, default: true, type: 'toggle' }
-          }
-        }
-      },
-      torrc: {
-        torPort: { value: 9050, default: 9050, type: 'number' },
-        hiddenServicePort: { value: 9001, default: 9001, type: 'number' },
-        logNoticeFile: { value: "./logs/notices.log", default: "./logs/notices.log", type: 'text' },
-        controlPort: { value: 9051, default: 9051, type: 'number' },
-        hashedControlPassword: { value: false, default: false, type: 'toggle' },
-        orPort: { value: 0, default: 0, type: 'number' },
-        disableNetwork: { value: 0, default: 0, type: 'number' },
-        avoidDiskWrites: { value: 1, default: 1, type: 'number' }
-      }
-    };
+    // Inicializar con estructuras vacías (se llenarán desde Kotlin)
+    this.chats = [];
+    this.contacts = [];
+    this.messages = {};
+    this.settings = {};
 
     this.init();
   }
 
   async init() {
+    // Cargar datos por defecto desde Kotlin
+    await this.loadDefaultData();
+
     // Cargar datos del usuario desde Kotlin
-    // await this.loadUserData();
+    await this.loadUserData();
+
+    // Cargar configuraciones desde Kotlin
+    await this.loadSettings();
 
     // Cargar vistas iniciales
     this.loadChats();
@@ -109,6 +33,50 @@ class DarkMessengerApp {
     setTimeout(() => {
       this.showToast("Dark Messenger Started");
     }, 1000);
+  }
+
+  async loadDefaultData() {
+    try {
+      if (window.dma && dma.getDefaultData) {
+        const defaultData = JSON.parse(dma.getDefaultData());
+        
+        // Cargar contactos por defecto
+        if (defaultData.contacts && defaultData.contacts.length > 0) {
+          this.contacts = defaultData.contacts.map(contact => ({
+            id: contact.id,
+            name: contact.name,
+            onion: contact.onion,
+            status: contact.status || "Online"
+          }));
+        }
+        
+        // Cargar chats por defecto
+        if (defaultData.defaultChats && defaultData.defaultChats.length > 0) {
+          this.chats = defaultData.defaultChats.map(chat => ({
+            id: chat.id,
+            contactId: chat.contactId,
+            lastMessage: chat.lastMessage,
+            timestamp: chat.timestamp || new Date().toISOString(),
+            unread: chat.unread || false
+          }));
+        }
+        
+        // Cargar mensajes por defecto
+        if (defaultData.defaultMessages) {
+          // Asegurarse de que los mensajes tengan timestamp si no lo tienen
+          Object.keys(defaultData.defaultMessages).forEach(chatId => {
+            this.messages[chatId] = defaultData.defaultMessages[chatId].map(msg => ({
+              ...msg,
+              timestamp: msg.timestamp || new Date(Date.now() - 3600000).toISOString()
+            }));
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error loading default data from Kotlin:", error);
+      // Si falla la carga, dejar estructuras vacías
+      this.showToast("Error loading default data");
+    }
   }
 
   async loadUserData() {
@@ -125,23 +93,39 @@ class DarkMessengerApp {
           document.getElementById('user-onion').textContent = data.onionAddress;
         }
 
-        // Cargar contactos desde userData si existen
-        if (data.contacts) {
-          const contactsJson = data.contacts;
-          this.contacts = [];
-          for (let i = 0; i < contactsJson.length; i++) {
-            const contact = contactsJson[i];
-            this.contacts.push({
-              id: i,
-              name: contact.name,
-              onion: contact.onion,
-              status: "Online"
-            });
+        // Si el usuario tiene contactos guardados, usarlos (sobrescribiendo los por defecto)
+        if (data.contacts && data.contacts.length > 0) {
+          this.contacts = data.contacts.map((contact, index) => ({
+            id: index,
+            name: contact.name,
+            onion: contact.onion,
+            status: "Online" // TODO: Obtener estado real
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("Error loading user data from Kotlin:", error);
+      this.showToast("Error loading user data");
+    }
+  }
+
+  async loadSettings() {
+    try {
+      if (window.dma && dma.getSettings) {
+        const settingsData = JSON.parse(dma.getSettings());
+        if (settingsData && Object.keys(settingsData).length > 0) {
+          this.settings = settingsData;
+        } else {
+          // Cargar configuraciones por defecto si no hay guardadas
+          if (window.dma && dma.getDefaultSettings) {
+            const defaultSettings = JSON.parse(dma.getDefaultSettings());
+            this.settings = defaultSettings;
           }
         }
       }
     } catch (error) {
-      console.error("Error loading user data:", error);
+      console.error("Error loading settings from Kotlin:", error);
+      this.showToast("Error loading settings");
     }
   }
 
@@ -308,7 +292,7 @@ class DarkMessengerApp {
                     <div class="contact-status">${contact.status}</div>
                 </div>
                 <div class="contact-actions">
-                    ${mode === 'newChat' ? 
+                    ${mode === 'newChat' ?
                         `<button class="contact-btn" onclick="app.startChatWithContact(${contact.id})">
                             <i class="fas fa-comment"></i>
                         </button>` :
@@ -449,6 +433,12 @@ class DarkMessengerApp {
     const container = document.querySelector('.settings-container');
     container.innerHTML = '';
 
+    // Verificar si hay configuraciones cargadas
+    if (Object.keys(this.settings).length === 0) {
+      container.innerHTML = '<p>Loading settings...</p>';
+      return;
+    }
+
     // darkmessenger.conf
     const darkmessengerSection = this.createSettingsSection('darkmessenger.conf', 'darkmessenger');
     container.appendChild(darkmessengerSection);
@@ -487,7 +477,11 @@ class DarkMessengerApp {
     content.className = 'settings-content active';
 
     const settings = this.settings[sectionKey];
-    content.appendChild(this.createSettingsForm(settings, sectionKey));
+    if (settings) {
+      content.appendChild(this.createSettingsForm(settings, sectionKey));
+    } else {
+      content.innerHTML = '<p>No settings available</p>';
+    }
 
     section.appendChild(header);
     section.appendChild(content);
@@ -578,29 +572,7 @@ class DarkMessengerApp {
 
     // Guardar en Kotlin
     if (window.dma && dma.updateSettings) {
-      const settingsData = {
-        username: this.settings.darkmessenger.general.username.value,
-        onionAddress: this.settings.darkmessenger.general.onionAddress.value,
-        allowAddMe: this.settings.darkmessenger.general.allowAddMe.value,
-        addBack: this.settings.darkmessenger.general.addBack.value,
-        alertOnNewMessages: this.settings.darkmessenger.general.alertOnNewMessages.value,
-        checkNewMessagesSeconds: this.settings.darkmessenger.general.checkNewMessagesSeconds.value,
-        verbose: this.settings.darkmessenger.general.verbose.value,
-        debug: this.settings.darkmessenger.general.debug.value,
-        debugWithTime: this.settings.darkmessenger.general.debugWithTime.value,
-        torConfig: {
-          torPort: this.settings.torrc.torPort.value,
-          hiddenServicePort: this.settings.torrc.hiddenServicePort.value,
-          logNoticeFile: this.settings.torrc.logNoticeFile.value,
-          controlPort: this.settings.torrc.controlPort.value,
-          hashedControlPassword: this.settings.torrc.hashedControlPassword.value,
-          orPort: this.settings.torrc.orPort.value,
-          disableNetwork: this.settings.torrc.disableNetwork.value,
-          avoidDiskWrites: this.settings.torrc.avoidDiskWrites.value
-        }
-      };
-
-      const jsonData = JSON.stringify(settingsData);
+      const jsonData = JSON.stringify(this.settings);
       dma.updateSettings(jsonData);
     }
 
@@ -691,9 +663,9 @@ class DarkMessengerApp {
     }, 3000);
 
     // También mostrar toast nativo
-    if (window.dma && dma.toast) {
+    /*if (window.dma && dma.toast) {
       dma.toast(message);
-    }
+    }*/
   }
 
   showModal(modalId) {

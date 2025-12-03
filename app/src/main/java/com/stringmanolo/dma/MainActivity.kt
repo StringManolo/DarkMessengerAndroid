@@ -10,24 +10,27 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.InputStream
 
 class MainActivity : AppCompatActivity() {
 
   private lateinit var webView: WebView
   private val gson = Gson()
   private lateinit var userData: UserData
+  private lateinit var defaultDataManager: DefaultDataManager
 
   @SuppressLint("SetJavaScriptEnabled")
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.activity_main)
 
-    // Inicializar datos de usuario
-    userData = UserData(
-      username = "Anonymous",
-      onionAddress = "placeholder.onion",
-      contacts = emptyList()
-    )
+    // Inicializar gestor de datos por defecto
+    defaultDataManager = DefaultDataManager(this)
+
+    // Cargar datos del usuario (mezcla de guardados y por defecto)
+    loadUserData()
 
     webView = findViewById(R.id.webView)
     setupWebView()
@@ -35,28 +38,21 @@ class MainActivity : AppCompatActivity() {
 
   @SuppressLint("SetJavaScriptEnabled")
   private fun setupWebView() {
-    // Habilitar JavaScript
     webView.settings.javaScriptEnabled = true
-
-    // Habilitar localStorage
     webView.settings.domStorageEnabled = true
 
-    // Agregar interfaz JavaScript-Kotlin
     webView.addJavascriptInterface(WebAppInterface(), "dma")
 
-    // Configurar WebViewClient para manejar URLs internas
     webView.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-        // Manejar todas las URLs dentro del WebView
         return false
       }
     }
 
-    // Configurar WebChromeClient para soporte de JavaScript avanzado
     webView.webChromeClient = WebChromeClient()
 
-    // Cargar la interfaz HTML
-    webView.loadUrl("file:///android_asset/dark-messenger-ui.html")
+    // Cargar desde la nueva ubicación
+    webView.loadUrl("file:///android_asset/www/dark-messenger-ui.html")
   }
 
   override fun onBackPressed() {
@@ -67,210 +63,77 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
-  /**
-   * Clase que sirve como interfaz entre JavaScript y Kotlin
-   * Los métodos anotados con @JavascriptInterface son accesibles desde JavaScript
-   */
-    inner class WebAppInterface {
+  private fun loadUserData() {
+    val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
 
-      /**
-       * Obtener datos del usuario para inyectar en la interfaz web
-       * @return JSON con datos del usuario
-       */
-        @JavascriptInterface
-        fun getUserData(): String {
-          val userJson = gson.toJson(userData)
-          return userJson
-        }
+    val savedUsername = sharedPref.getString("username", null)
+    val savedOnion = sharedPref.getString("onionAddress", null)
+    val savedContacts = sharedPref.getString("contacts", null)
 
-        /**
-         * Actualizar los contactos desde la interfaz web
-         * @param contactsJson JSON con la lista de contactos
-         */
-        @JavascriptInterface
-        fun updateContacts(contactsJson: String) {
-          runOnUiThread {
-            try {
-              // Parsear los contactos recibidos desde JavaScript
-              val contactsList = gson.fromJson(contactsJson, Map::class.java)
-              val contacts = contactsList["contacts"] as? List<*>
-
-              if (contacts != null) {
-                // Actualizar los datos del usuario
-                val newContacts = contacts.map { contactMap ->
-                  val map = contactMap as Map<*, *>
-                  Contact(
-                    name = map["name"] as? String ?: "",
-                    onion = map["onion"] as? String ?: ""
-                  )
-                }
-
-                userData = userData.copy(contacts = newContacts)
-
-                // Aquí puedes guardar los contactos en SharedPreferences o Room Database
-                saveContactsToStorage(contactsJson)
-
-                showToast("Contacts updated")
-              }
-            } catch (e: JsonSyntaxException) {
-              showToast("Error parsing contacts: ${e.message}")
-            } catch (e: Exception) {
-              showToast("Error updating contacts: ${e.message}")
-            }
-          }
-        }
-
-        /**
-         * Actualizar configuraciones desde la interfaz web
-         * @param settingsJson JSON con las configuraciones
-         */
-        @JavascriptInterface
-        fun updateSettings(settingsJson: String) {
-          runOnUiThread {
-            try {
-              // Parsear configuraciones
-              val settings = gson.fromJson(settingsJson, Map::class.java)
-
-              // Actualizar datos del usuario con las configuraciones
-              userData = userData.copy(
-                username = settings["username"] as? String ?: userData.username,
-                onionAddress = settings["onionAddress"] as? String ?: userData.onionAddress
-              )
-
-              // Aquí puedes guardar las configuraciones en SharedPreferences
-              saveSettingsToStorage(settingsJson)
-
-              showToast("Settings saved")
-            } catch (e: Exception) {
-              showToast("Error saving settings: ${e.message}")
-            }
-          }
-        }
-
-        /**
-         * Mostrar un toast desde JavaScript
-         * @param message Mensaje a mostrar
-         */
-        @JavascriptInterface
-        fun toast(message: String) {
-          runOnUiThread {
-            showToast(message)
-          }
-        }
-
-        /**
-         * Obtener configuraciones guardadas
-         * @return JSON con configuraciones
-         */
-        @JavascriptInterface
-        fun getSettings(): String {
-          // Aquí deberías cargar las configuraciones desde SharedPreferences
-          val defaultSettings = mapOf(
-            "username" to userData.username,
-            "onionAddress" to userData.onionAddress,
-            "allowAddMe" to true,
-            "addBack" to true,
-            "alertOnNewMessages" to true,
-            "checkNewMessagesSeconds" to 20,
-            "verbose" to true,
-            "debug" to true,
-            "debugWithTime" to true,
-            "torConfig" to mapOf(
-              "torPort" to 9050,
-              "hiddenServicePort" to 9001,
-              "logNoticeFile" to "./logs/notices.log",
-              "controlPort" to 9051,
-              "hashedControlPassword" to false,
-              "orPort" to 0,
-              "disableNetwork" to 0,
-              "avoidDiskWrites" to 1
-            )
-          )
-          return gson.toJson(defaultSettings)
-        }
-
-        /**
-         * Obtener contactos guardados
-         * @return JSON con contactos
-         */
-        @JavascriptInterface
-        fun getContacts(): String {
-          return gson.toJson(mapOf("contacts" to userData.contacts))
-        }
-
-        /**
-         * Enviar un mensaje a través de la red Tor
-         * @param messageJson JSON con datos del mensaje
-         */
-        @JavascriptInterface
-        fun sendTorMessage(messageJson: String) {
-          runOnUiThread {
-            try {
-              val messageData = gson.fromJson(messageJson, Map::class.java)
-              val recipient = messageData["recipient"] as? String
-              val message = messageData["message"] as? String
-
-              if (recipient != null && message != null) {
-                // Aquí implementarías el envío real a través de la red Tor
-                // Por ahora solo mostramos un toast
-                showToast("Message sent to $recipient")
-              }
-            } catch (e: Exception) {
-              showToast("Error sending message: ${e.message}")
-            }
-          }
-        }
-
-        /**
-         * Recibir mensajes de la red Tor (simulado para demo)
-         * @return JSON con mensajes recibidos
-         */
-        @JavascriptInterface
-        fun checkForMessages(): String {
-          // En una implementación real, esto consultaría el daemon de Tor
-          // Para la demo, devolvemos mensajes vacíos
-          val messages = mapOf(
-            "messages" to emptyList<Any>(),
-            "timestamp" to System.currentTimeMillis()
-          )
-          return gson.toJson(messages)
-        }
+    // Cargar contactos (guardados o por defecto)
+    val contacts = if (savedContacts != null) {
+      try {
+        val contactsData = gson.fromJson(savedContacts, Array<Contact>::class.java)
+        contactsData.toList()
+      } catch (e: Exception) {
+        defaultDataManager.getDefaultContacts()
       }
-
-      /**
-       * Guardar contactos en almacenamiento persistente
-       */
-    private fun saveContactsToStorage(contactsJson: String) {
-      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
-      with(sharedPref.edit()) {
-        putString("contacts", contactsJson)
-        apply()
-      }
+    } else {
+      defaultDataManager.getDefaultContacts()
     }
 
-    /**
-     * Guardar configuraciones en almacenamiento persistente
-     */
-    private fun saveSettingsToStorage(settingsJson: String) {
-      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
-      with(sharedPref.edit()) {
-        putString("settings", settingsJson)
-        apply()
-      }
+    userData = UserData(
+      username = savedUsername ?: "Anonymous",
+      onionAddress = savedOnion ?: defaultDataManager.getDefaultOnionAddress(),
+      contacts = contacts
+    )
+  }
+
+  inner class WebAppInterface {
+
+    @JavascriptInterface
+    fun getUserData(): String {
+      return gson.toJson(userData)
     }
 
-    /**
-     * Cargar datos guardados al iniciar la aplicación
-     */
-    private fun loadSavedData() {
-      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+    @JavascriptInterface
+    fun getDefaultData(): String {
+      return gson.toJson(defaultDataManager.getAllDefaultData())
+    }
 
-      val savedContacts = sharedPref.getString("contacts", null)
+    @JavascriptInterface
+    fun getDefaultContacts(): String {
+      return gson.toJson(defaultDataManager.getDefaultContacts())
+    }
+
+    @JavascriptInterface
+    fun getDefaultChats(): String {
+      return gson.toJson(defaultDataManager.getDefaultChats())
+    }
+
+    @JavascriptInterface
+    fun getDefaultSettings(): String {
+      return defaultDataManager.getDefaultSettingsJson()
+    }
+
+    @JavascriptInterface
+    fun getSettings(): String {
+      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
       val savedSettings = sharedPref.getString("settings", null)
 
-      if (savedContacts != null) {
+      return savedSettings ?: defaultDataManager.getDefaultSettingsJson()
+    }
+
+    @JavascriptInterface
+    fun getContacts(): String {
+      return gson.toJson(mapOf("contacts" to userData.contacts))
+    }
+
+    @JavascriptInterface
+    fun updateContacts(contactsJson: String) {
+      runOnUiThread {
         try {
-          val contactsList = gson.fromJson(savedContacts, Map::class.java)
+          val contactsList = gson.fromJson(contactsJson, Map::class.java)
           val contacts = contactsList["contacts"] as? List<*>
 
           if (contacts != null) {
@@ -281,44 +144,186 @@ class MainActivity : AppCompatActivity() {
                 onion = map["onion"] as? String ?: ""
               )
             }
+
             userData = userData.copy(contacts = newContacts)
+            saveContactsToStorage(gson.toJson(newContacts))
+            showToast("Contacts updated")
           }
         } catch (e: Exception) {
-          // Ignorar errores de parseo
+          showToast("Error updating contacts: ${e.message}")
         }
       }
+    }
 
-      if (savedSettings != null) {
+    @JavascriptInterface
+    fun updateSettings(settingsJson: String) {
+      runOnUiThread {
         try {
-          val settings = gson.fromJson(savedSettings, Map::class.java)
-          userData = userData.copy(
-            username = settings["username"] as? String ?: userData.username,
-            onionAddress = settings["onionAddress"] as? String ?: userData.onionAddress
-          )
+          val settings = gson.fromJson(settingsJson, Map::class.java)
+
+          // Extraer username y onion si están presentes
+          val general = settings["darkmessenger"] as? Map<*, *>
+          val generalSettings = general?.get("general") as? Map<*, *>
+
+          val username = generalSettings?.get("username") as? Map<*, *>
+          val onionAddress = generalSettings?.get("onionAddress") as? Map<*, *>
+
+          if (username != null) {
+            userData = userData.copy(username = username["value"] as? String ?: userData.username)
+          }
+
+          if (onionAddress != null) {
+            userData = userData.copy(onionAddress = onionAddress["value"] as? String ?: userData.onionAddress)
+          }
+
+          saveSettingsToStorage(settingsJson)
+          saveUserInfoToStorage()
+          showToast("Settings saved")
         } catch (e: Exception) {
-          // Ignorar errores de parseo
+          showToast("Error saving settings: ${e.message}")
         }
       }
     }
 
-    /**
-     * Mostrar un toast
-     */
-    private fun showToast(message: String) {
-      Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    @JavascriptInterface
+    fun toast(message: String) {
+      runOnUiThread {
+        showToast(message)
+      }
     }
 
-    /**
-     * Datos de la aplicación
-     */
-    data class UserData(
-      var username: String,
-      var onionAddress: String,
-      var contacts: List<Contact>
-    )
+    @JavascriptInterface
+    fun sendTorMessage(messageJson: String) {
+      runOnUiThread {
+        try {
+          val messageData = gson.fromJson(messageJson, Map::class.java)
+          val recipient = messageData["recipient"] as? String
+          val message = messageData["message"] as? String
 
-    data class Contact(
-      val name: String,
-      val onion: String
+          if (recipient != null && message != null) {
+            showToast("Message sent to $recipient")
+          }
+        } catch (e: Exception) {
+          showToast("Error sending message: ${e.message}")
+        }
+      }
+    }
+  }
+
+  private fun saveContactsToStorage(contactsJson: String) {
+    val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+    sharedPref.edit().putString("contacts", contactsJson).apply()
+  }
+
+  private fun saveSettingsToStorage(settingsJson: String) {
+    val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+    sharedPref.edit().putString("settings", settingsJson).apply()
+  }
+
+  private fun saveUserInfoToStorage() {
+    val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+    sharedPref.edit()
+    .putString("username", userData.username)
+    .putString("onionAddress", userData.onionAddress)
+    .apply()
+  }
+
+  private fun showToast(message: String) {
+    Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+  }
+
+  data class UserData(
+    var username: String,
+    var onionAddress: String,
+    var contacts: List<Contact>
+  )
+
+  data class Contact(
+    val name: String,
+    val onion: String
+  )
+}
+
+// Gestor de datos por defecto
+class DefaultDataManager(private val context: android.content.Context) {
+
+  fun getAllDefaultData(): Map<String, Any> {
+    return mapOf(
+      "contacts" to getDefaultContacts(),
+      "chats" to getDefaultChats(),
+      "settings" to JSONObject(getDefaultSettingsJson()).toMap()
     )
   }
+
+  fun getDefaultContacts(): List<MainActivity.Contact> {
+    return try {
+      val json = loadAssetFile("data/default_contacts.json")
+      val jsonArray = JSONArray(json)
+
+      jsonArray.mapIndexed { index, item ->
+        val obj = item as JSONObject
+        MainActivity.Contact(
+          name = obj.getString("name"),
+          onion = obj.getString("onion")
+        )
+      }
+    } catch (e: Exception) {
+      e.printStackTrace()
+      // Fallback básico
+      listOf(
+        MainActivity.Contact("StringManolo", "placeholder.onion")
+      )
+    }
+  }
+
+  fun getDefaultChats(): List<Map<String, Any>> {
+    return try {
+      val json = loadAssetFile("data/default_chats.json")
+      val jsonArray = JSONArray(json)
+
+      jsonArray.map { item ->
+        val obj = item as JSONObject
+        mapOf(
+          "id" to obj.getInt("id"),
+          "contactId" to obj.getInt("contactId"),
+          "lastMessage" to obj.getString("lastMessage"),
+          "unread" to obj.getBoolean("unread")
+        )
+      }
+    } catch (e: Exception) {
+      e.printStackTrace()
+      emptyList()
+    }
+  }
+
+  fun getDefaultSettingsJson(): String {
+    return try {
+      loadAssetFile("data/default_settings.json")
+    } catch (e: Exception) {
+      e.printStackTrace()
+      "{}"
+    }
+  }
+
+  fun getDefaultOnionAddress(): String {
+    return try {
+      val json = loadAssetFile("data/default_settings.json")
+      val jsonObj = JSONObject(json)
+      val darkmessenger = jsonObj.getJSONObject("darkmessenger")
+      val general = darkmessenger.getJSONObject("general")
+      val onionAddress = general.getJSONObject("onionAddress")
+      onionAddress.getString("value")
+    } catch (e: Exception) {
+      "placeholder.onion"
+    }
+  }
+
+  private fun loadAssetFile(fileName: String): String {
+    val inputStream: InputStream = context.assets.open(fileName)
+    val size = inputStream.available()
+    val buffer = ByteArray(size)
+    inputStream.read(buffer)
+    inputStream.close()
+    return String(buffer, Charsets.UTF_8)
+  }
+}

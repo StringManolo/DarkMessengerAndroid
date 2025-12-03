@@ -1,0 +1,43 @@
+{
+  "darkmessenger": {
+    "general": {
+      "username": { "value": null, "default": null, "type": "text" },
+      "onionAddress": { "value": "placeholder.onion", "default": "placeholder.onion", "type": "text" },
+      "allowAddMe": { "value": true, "default": true, "type": "toggle" },
+      "addBack": { "value": true, "default": true, "type": "toggle" },
+      "alertOnNewMessages": { "value": true, "default": true, "type": "toggle" },
+      "checkNewMessagesSeconds": { "value": 20, "default": 20, "type": "number" },
+      "verbose": { "value": true, "default": true, "type": "toggle" },
+      "debug": { "value": true, "default": true, "type": "toggle" },
+      "debugWithTime": { "value": true, "default": true, "type": "toggle" }
+    },
+    "cryptography": {
+      "useERK": { "value": false, "default": false, "type": "toggle" },
+      "offlineMessages": {
+        "ecies": { "value": true, "default": true, "type": "toggle" },
+        "rsa": { "value": true, "default": true, "type": "toggle" },
+        "crystalKyber": { "value": true, "default": true, "type": "toggle" }
+      },
+      "onlineMessages": {
+        "ecies": { "value": true, "default": true, "type": "toggle" },
+        "rsa": { "value": true, "default": true, "type": "toggle" },
+        "crystalKyber": { "value": true, "default": true, "type": "toggle" }
+      },
+      "addMe": {
+        "ecies": { "value": true, "default": true, "type": "toggle" },
+        "rsa": { "value": true, "default": true, "type": "toggle" },
+        "crystalKyber": { "value": true, "default": true, "type": "toggle" }
+      }
+    }
+  },
+  "torrc": {
+    "torPort": { "value": 9050, "default": 9050, "type": "number" },
+    "hiddenServicePort": { "value": 9001, "default": 9001, "type": "number" },
+    "logNoticeFile": { "value": "./logs/notices.log", "default": "./logs/notices.log", "type": "text" },
+    "controlPort": { "value": 9051, "default": 9051, "type": "number" },
+    "hashedControlPassword": { "value": false, "default": false, "type": "toggle" },
+    "orPort": { "value": 0, "default": 0, "type": "number" },
+    "disableNetwork": { "value": 0, "default": 0, "type": "number" },
+    "avoidDiskWrites": { "value": 1, "default": 1, "type": "number" }
+  }
+}
