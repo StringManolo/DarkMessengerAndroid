@@ -5,42 +5,39 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Circular Background -->
     <path
         android:fillColor="#0A0A0A"
         android:pathData="M54,0C83.82,0 108,24.18 108,54C108,83.82 83.82,108 54,108C24.18,108 0,83.82 0,54C0,24.18 24.18,0 54,0Z"/>
 
-    <!-- Ghost Head -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#333333"
-        android:strokeWidth="3"
-        android:strokeDashArray="5,5"
+        android:fillColor="#222222"
+        android:fillAlpha="0.7"
         android:pathData="M54,40a20,20 0 1,0 0,0.1z"/>
 
-    <!-- Ghost Body -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#333333"
-        android:strokeWidth="3"
-        android:strokeDashArray="5,5"
+        android:fillColor="#222222"
+        android:fillAlpha="0.7"
         android:pathData="M54,75a15,20 0 1,0 0,0.1z"/>
 
-    <!-- Message Bubble -->
     <path
         android:fillColor="#1A1A1A"
         android:pathData="M54,85a12,12 0 1,0 0,0.1z"/>
 
-    <!-- Question Mark -->
-    <path
-        android:fillColor="#00FF88"
-        android:pathData="M52,83a2,2 0 1,0 4,0 2,2 0 0,0 -4,0zM54,88a1,1 0 1,0 0,2 1,1 0 0,0 0,-2z"/>
-
-    <!-- Bubble border -->
     <path
         android:fillColor="#00000000"
         android:strokeColor="#333333"
         android:strokeWidth="1.5"
         android:pathData="M54,85a12,12 0 1,0 0,0.1z"/>
+
+    <path
+        android:fillColor="#00FF88"
+        android:pathData="M54,82a3,3 0 1,0 0,0.1z"/>
+
+    <path
+        android:fillColor="#00FF88"
+        android:pathData="M53,86h2v5h-2z"/>
+    <path
+        android:fillColor="#00FF88"
+        android:pathData="M52,90a1,1 0 1,0 4,0 1,1 0 0,0 -4,0z"/>
 
 </vector>
