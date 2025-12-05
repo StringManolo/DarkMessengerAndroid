@@ -18,8 +18,14 @@
 - Force Tor Checkbox Active (until other way to P2P without Tor available)
 - Hidde New Chat Button outside main menu
 - Remove extra toast from clipboard
+- Fix full domain breaking contacts/newChat list in portrait not allowing for opening new conversation
 
 ### Right now:
+- Add http server attached to hidden service.
+- /send endpoint to read messages.
+- /addme endpoint to allow remote user to automatically add you to contacts
+- Allow chats with non contacts
+- Special chat to talk to himself (detect if trying to talk to onion adress in use and cancel request)
 - Launch Tor as service when app starts.
 - Use a MVP extendable protocol to test simple message sending and update in app
 
