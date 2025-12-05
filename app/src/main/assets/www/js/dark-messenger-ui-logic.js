@@ -7,6 +7,8 @@ class DarkMessengerApp {
     this.userData = null;
     this.torEnabled = false;
     this.torLogs = [];
+    this.torCheckInterval = null;
+    this.isCheckingOnionAddress = false;
 
     // Inicializar con estructuras vacías (se llenarán desde Kotlin)
     this.chats = [];
@@ -31,6 +33,11 @@ class DarkMessengerApp {
       // Cargar estado de Tor
       await this.loadTorStatus();
 
+      // Iniciar verificación automática de Tor si está habilitado
+      if (this.torEnabled) {
+        this.startTorAutoCheck();
+      }
+
       // Cargar chats guardados
       await this.loadSavedChats();
 
@@ -41,6 +48,9 @@ class DarkMessengerApp {
       this.loadChats();
       this.loadContacts();
 
+      // Escuchar eventos de Tor
+      this.setupTorEventListeners();
+
       // Mostrar toast de bienvenida
       setTimeout(() => {
         this.showToast("Dark Messenger Started");
@@ -49,6 +59,22 @@ class DarkMessengerApp {
       console.error("Error initializing app:", error);
       this.showToast("Error initializing app");
     }
+  }
+
+  setupTorEventListeners() {
+    // Escuchar evento cuando se actualiza el onion address
+    window.addEventListener('onionAddressUpdated', (event) => {
+      const newOnion = event.detail;
+      if (newOnion && newOnion !== 'placeholder.onion') {
+        this.updateOnionAddressInUI(newOnion);
+        this.showToast(`Onion address updated: ${newOnion}`);
+      }
+    });
+
+    // Escuchar cambios en el estado de Tor
+    window.addEventListener('torStatusChanged', () => {
+      this.checkTorStatus();
+    });
   }
 
   async loadDefaultData() {
@@ -182,6 +208,18 @@ class DarkMessengerApp {
     try {
       if (window.dma && dma.isTorEnabled) {
         this.torEnabled = dma.isTorEnabled();
+
+        // Verificar si Tor está realmente corriendo
+        if (window.dma && dma.isTorRunning) {
+          const isRunning = dma.isTorRunning();
+          if (this.torEnabled && !isRunning) {
+            // Tor está habilitado pero no corriendo, intentar iniciarlo
+            this.startTor();
+          } else if (!this.torEnabled && isRunning) {
+            // Tor está corriendo pero no habilitado, detenerlo
+            this.stopTor();
+          }
+        }
       }
     } catch (error) {
       console.error("Error loading Tor status:", error);
@@ -580,6 +618,90 @@ class DarkMessengerApp {
     container.appendChild(saveButton);
   }
 
+  createTorControlSection() {
+    const section = document.createElement('div');
+    section.className = 'settings-section';
+
+    const header = document.createElement('div');
+    header.className = 'settings-header';
+    header.onclick = (e) => {
+      const content = e.currentTarget.nextElementSibling;
+      content.classList.toggle('active');
+    };
+
+    header.innerHTML = `
+      <h3>Tor Control</h3>
+      <i class="fas fa-chevron-down"></i>
+    `;
+
+    const content = document.createElement('div');
+    content.className = 'settings-content active';
+
+    // Tor Status
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'tor-status';
+    const onionAddress = this.userData?.onionAddress || 'placeholder.onion';
+    const isCustomOnion = onionAddress !== 'placeholder.onion' && onionAddress.includes('.onion');
+
+    statusDiv.innerHTML = `
+      <div class="status-indicator">
+        <span class="status-dot ${this.torEnabled ? 'online' : 'offline'}"></span>
+        <span>Tor: ${this.torEnabled ? 'Running' : 'Stopped'}</span>
+      </div>
+      <div class="onion-address" style="margin-top: 8px; font-size: 12px; color: ${isCustomOnion ? '#4CAF50' : 'var(--text-secondary)'};">
+        <i class="fas ${isCustomOnion ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+        Onion: ${onionAddress}
+        ${isCustomOnion ? ' (Generated)' : ' (Placeholder)'}
+      </div>
+    `;
+
+    // Control Buttons
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'tor-control-buttons';
+    buttonContainer.style.marginTop = '10px';
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.gap = '10px';
+
+    const startButton = document.createElement('button');
+    startButton.className = 'btn btn-success';
+    startButton.innerHTML = '<i class="fas fa-play"></i> Start Tor';
+    startButton.onclick = () => this.startTor();
+    startButton.disabled = this.torEnabled;
+
+    const stopButton = document.createElement('button');
+    stopButton.className = 'btn btn-danger';
+    stopButton.innerHTML = '<i class="fas fa-stop"></i> Stop Tor';
+    stopButton.onclick = () => this.stopTor();
+    stopButton.disabled = !this.torEnabled;
+
+    const logsButton = document.createElement('button');
+    logsButton.className = 'btn btn-info';
+    logsButton.innerHTML = '<i class="fas fa-terminal"></i> View Logs';
+    logsButton.onclick = () => this.showDebugView();
+
+    const refreshButton = document.createElement('button');
+    refreshButton.className = 'btn btn-warning';
+    refreshButton.innerHTML = '<i class="fas fa-sync"></i> Refresh';
+    refreshButton.onclick = () => {
+      this.checkTorStatus();
+      this.checkGeneratedOnionAddress();
+      this.loadSettingsUI();
+    };
+
+    buttonContainer.appendChild(startButton);
+    buttonContainer.appendChild(stopButton);
+    buttonContainer.appendChild(logsButton);
+    buttonContainer.appendChild(refreshButton);
+
+    content.appendChild(statusDiv);
+    content.appendChild(buttonContainer);
+
+    section.appendChild(header);
+    section.appendChild(content);
+
+    return section;
+  }
+
   async retryLoadSettings() {
     await this.loadSettings();
     this.loadSettingsUI();
@@ -610,70 +732,6 @@ class DarkMessengerApp {
     } else {
       content.innerHTML = '<p>No settings available</p>';
     }
-
-    section.appendChild(header);
-    section.appendChild(content);
-
-    return section;
-  }
-
-  createTorControlSection() {
-    const section = document.createElement('div');
-    section.className = 'settings-section';
-
-    const header = document.createElement('div');
-    header.className = 'settings-header';
-    header.onclick = (e) => {
-      const content = e.currentTarget.nextElementSibling;
-      content.classList.toggle('active');
-    };
-
-    header.innerHTML = `
-      <h3>Tor Control</h3>
-      <i class="fas fa-chevron-down"></i>
-    `;
-
-    const content = document.createElement('div');
-    content.className = 'settings-content active';
-
-    // Tor Status
-    const statusDiv = document.createElement('div');
-    statusDiv.className = 'tor-status';
-    statusDiv.innerHTML = `
-      <div class="status-indicator">
-        <span class="status-dot ${this.torEnabled ? 'online' : 'offline'}"></span>
-        <span>Tor: ${this.torEnabled ? 'Running' : 'Stopped'}</span>
-      </div>
-    `;
-
-    // Control Buttons
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'tor-control-buttons';
-    buttonContainer.style.marginTop = '10px';
-    buttonContainer.style.display = 'flex';
-    buttonContainer.style.gap = '10px';
-
-    const startButton = document.createElement('button');
-    startButton.className = 'btn btn-success';
-    startButton.innerHTML = '<i class="fas fa-play"></i> Start Tor';
-    startButton.onclick = () => this.startTor();
-
-    const stopButton = document.createElement('button');
-    stopButton.className = 'btn btn-danger';
-    stopButton.innerHTML = '<i class="fas fa-stop"></i> Stop Tor';
-    stopButton.onclick = () => this.stopTor();
-
-    const logsButton = document.createElement('button');
-    logsButton.className = 'btn btn-info';
-    logsButton.innerHTML = '<i class="fas fa-terminal"></i> View Logs';
-    logsButton.onclick = () => this.showDebugView();
-
-    buttonContainer.appendChild(startButton);
-    buttonContainer.appendChild(stopButton);
-    buttonContainer.appendChild(logsButton);
-
-    content.appendChild(statusDiv);
-    content.appendChild(buttonContainer);
 
     section.appendChild(header);
     section.appendChild(content);
@@ -763,6 +821,32 @@ class DarkMessengerApp {
       // Actualizar settings desde los inputs
       this.updateSettingsFromUI();
 
+      // Actualizar estado de Tor si cambió
+      if (this.settings.darkmessenger && this.settings.darkmessenger.tor) {
+        const torEnabled = this.settings.darkmessenger.tor.enabled.value;
+
+        if (torEnabled !== this.torEnabled) {
+          this.torEnabled = torEnabled;
+
+          // Guardar estado en Kotlin
+          if (window.dma && dma.saveTorEnabled) {
+            dma.saveTorEnabled(torEnabled);
+          }
+
+          // Iniciar/detener Tor según corresponda
+          if (torEnabled) {
+            await this.startTor();
+            this.startTorAutoCheck();
+          } else {
+            await this.stopTor();
+            if (this.torCheckInterval) {
+              clearInterval(this.torCheckInterval);
+              this.torCheckInterval = null;
+            }
+          }
+        }
+      }
+
       // Guardar en Kotlin
       if (window.dma && dma.updateSettings) {
         const jsonData = JSON.stringify(this.settings);
@@ -802,17 +886,24 @@ class DarkMessengerApp {
     }
   }
 
-  // Tor Control
+  // Tor Control Methods
   async startTor() {
     try {
       if (window.dma && dma.startTor) {
         const success = dma.startTor();
         if (success) {
           this.torEnabled = true;
-          dma.saveTorEnabled(true);
-          this.showToast('Tor started');
+          this.showToast('Tor starting...');
+
+          // Iniciar verificación periódica
+          this.startTorAutoCheck();
+
           // Actualizar UI después de un momento
-          setTimeout(() => this.loadSettingsUI(), 1000);
+          setTimeout(() => {
+            if (this.currentView === 'settingsView') {
+              this.loadSettingsUI();
+            }
+          }, 1000);
         } else {
           this.showToast('Failed to start Tor');
         }
@@ -829,9 +920,17 @@ class DarkMessengerApp {
         const success = dma.stopTor();
         if (success) {
           this.torEnabled = false;
-          dma.saveTorEnabled(false);
+
+          if (this.torCheckInterval) {
+            clearInterval(this.torCheckInterval);
+            this.torCheckInterval = null;
+          }
+
           this.showToast('Tor stopped');
-          this.loadSettingsUI();
+
+          if (this.currentView === 'settingsView') {
+            this.loadSettingsUI();
+          }
         }
       }
     } catch (error) {
@@ -840,7 +939,95 @@ class DarkMessengerApp {
     }
   }
 
-  // Debug View
+  startTorAutoCheck() {
+    if (this.torCheckInterval) {
+      clearInterval(this.torCheckInterval);
+    }
+
+    this.torCheckInterval = setInterval(() => {
+      this.checkTorStatus();
+      this.checkGeneratedOnionAddress();
+    }, 3000); // Verificar cada 3 segundos
+  }
+
+  async checkTorStatus() {
+    try {
+      if (window.dma && dma.isTorRunning) {
+        const isRunning = dma.isTorRunning();
+        if (isRunning !== this.torEnabled) {
+          this.torEnabled = isRunning;
+          // Actualizar UI si estamos en settings
+          if (this.currentView === 'settingsView') {
+            this.loadSettingsUI();
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking Tor status:", error);
+    }
+  }
+
+  async checkGeneratedOnionAddress() {
+    if (this.isCheckingOnionAddress) return;
+
+    this.isCheckingOnionAddress = true;
+    try {
+      if (window.dma && dma.getGeneratedOnionAddress) {
+        const generatedOnion = dma.getGeneratedOnionAddress();
+        if (generatedOnion && generatedOnion !== 'placeholder.onion') {
+          // Actualizar en UI
+          this.updateOnionAddressInUI(generatedOnion);
+
+          // Actualizar en settings si es diferente
+          if (this.userData && this.userData.onionAddress !== generatedOnion) {
+            this.updateOnionAddressInSettings(generatedOnion);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking generated onion address:", error);
+    } finally {
+      this.isCheckingOnionAddress = false;
+    }
+  }
+
+  updateOnionAddressInUI(newOnion) {
+    // Actualizar en sidebar
+    const userOnionElement = document.getElementById('user-onion');
+    if (userOnionElement) {
+      userOnionElement.textContent = newOnion;
+    }
+
+    // Actualizar en userData
+    if (this.userData) {
+      this.userData.onionAddress = newOnion;
+    }
+  }
+
+  async updateOnionAddressInSettings(newOnion) {
+    try {
+      if (!this.settings || !this.settings.darkmessenger) {
+        return;
+      }
+
+      // Actualizar en settings local
+      if (this.settings.darkmessenger.general && 
+        this.settings.darkmessenger.general.onionAddress) {
+        this.settings.darkmessenger.general.onionAddress.value = newOnion;
+      }
+
+      // Guardar en Kotlin si es diferente del placeholder
+      if (newOnion !== 'placeholder.onion') {
+        if (window.dma && dma.updateOnionAddressInSettings) {
+          dma.updateOnionAddressInSettings(newOnion);
+        }
+      }
+    } catch (error) {
+      console.error("Error updating onion address in settings:", error);
+    }
+  }
+
+  // Debug View Methods
   async loadDebugLogs() {
     try {
       if (window.dma && dma.getTorLogs) {
@@ -859,8 +1046,6 @@ class DarkMessengerApp {
     }
   }
 
-
-  
   formatLogEntry(log) {
     // Los logs ya vienen con formato [timestamp] mensaje
     // Solo separamos timestamp del mensaje para colorear
@@ -884,12 +1069,14 @@ class DarkMessengerApp {
         type = "warning";
       } else if (message.includes("notice") || message.includes("Notice")) {
         type = "success";
+      } else if (message.includes("HiddenServiceDir") || message.includes(".onion")) {
+        type = "success";
       }
 
       return `<div class="log-entry" data-type="${type}">
-              <span class="log-time">[${timeStr}]</span> 
-              ${message}
-            </div>`;
+                <span class="log-time">[${timeStr}]</span> 
+                ${message}
+              </div>`;
     }
 
     // Si no tiene formato timestamp, devolver tal cual
@@ -911,7 +1098,7 @@ class DarkMessengerApp {
     }
   }
 
-  // Mensajes
+  // Message Handling
   sendMessage() {
     const input = document.getElementById('messageInput');
     const text = input.value.trim();

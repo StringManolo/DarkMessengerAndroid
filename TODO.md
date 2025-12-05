@@ -9,10 +9,14 @@
 - Allow multiple accounts (multiple hidden service keys) need to add a button for it.
 - Add password option to log in the account (Kotlin data encrypted)
 - Allow users to be included into default_contacts.json if they want too
-
+- Add in-app updates
+- Add Tor bin build workflow for updates?
+- Add License.md, security.md, privacy.md legal.md contribute.md sponsors
+- Add option to retrieve and load keys for hidden service (export account / import account)
 
 ### UI:
 - Force Tor Checkbox Active (until other way to P2P without Tor available)
+- Hidde New Chat Button outside main menu
 
 ### Right now:
 - Debug Kotlin Data using toasts to create default info.
@@ -27,3 +31,6 @@
 
 ### Security:
 - Block inline to avoid xss
+
+### Paid
+- Option to multiacc. Manage / Swap / Delete multiple accounts. 

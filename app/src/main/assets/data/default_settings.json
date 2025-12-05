@@ -30,7 +30,7 @@
       }
     },
     "tor": {
-      "enabled": { "value": false, "default": false, "type": "toggle" },
+      "enabled": { "value": true, "default": true, "type": "toggle" },
       "socksPort": { "value": 9050, "default": 9050, "type": "number" },
       "controlPort": { "value": 9051, "default": 9051, "type": "number" }
     }
