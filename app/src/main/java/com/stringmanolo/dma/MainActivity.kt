@@ -17,7 +17,7 @@ import org.json.JSONObject
 import java.io.*
 import java.util.concurrent.Executors
 
-// Data classes (mantener las existentes)
+// Data classes
 data class Contact(
   val name: String,
   val onion: String
@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
     webView = findViewById(R.id.webView)
     setupWebView()
 
-    // Verificar si Tor debe arrancarse automáticamente
+    // Verificar si Tor debe arrancarse automáticamente - IMPORTANTE: después de setupWebView
     checkAndStartTor()
   }
 
@@ -81,10 +81,8 @@ class MainActivity : AppCompatActivity() {
     super.onResume()
     isAppInForeground = true
 
-    // Actualizar UI si Tor se inició mientras estábamos en background
-    if (torManager.isRunning()) {
-      webView.evaluateJavascript("window.dispatchEvent(new Event('torStatusChanged'));", null)
-    }
+    // Reanudar verificación de Tor si estaba habilitado
+    checkAndStartTor()
   }
 
   override fun onPause() {
@@ -153,12 +151,43 @@ class MainActivity : AppCompatActivity() {
 
   private fun checkAndStartTor() {
     val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
-    val torEnabled = sharedPref.getBoolean("tor_enabled", false)
 
+    // Primero, cargar la configuración por defecto para verificar si Tor está habilitado
+    val defaultSettings = defaultDataManager.getDefaultSettingsMap()
+    val torEnabledByDefault = isTorEnabledInSettings(defaultSettings)
+
+    // Verificar si hay un valor guardado, si no, usar el valor por defecto
+    val torEnabled = if (sharedPref.contains("tor_enabled")) {
+      sharedPref.getBoolean("tor_enabled", false)
+    } else {
+      // Si no hay valor guardado, usar el valor por defecto y guardarlo
+      sharedPref.edit().putBoolean("tor_enabled", torEnabledByDefault).apply()
+      torEnabledByDefault
+    }
+
+    // Iniciar Tor si está habilitado y no está corriendo
     if (torEnabled && !torManager.isRunning()) {
       executor.execute {
         torManager.startTor()
+        addLogToWebView("Tor auto-start attempted (enabled in settings)")
       }
+    }
+  }
+
+  private fun isTorEnabledInSettings(settings: Map<String, Any>): Boolean {
+    return try {
+      val darkmessenger = settings["darkmessenger"] as? Map<*, *>
+      val torSettings = darkmessenger?.get("tor") as? Map<*, *>
+      val enabledObj = torSettings?.get("enabled") as? Map<*, *>
+      enabledObj?.get("value") as? Boolean ?: false
+    } catch (e: Exception) {
+      false
+    }
+  }
+
+  private fun addLogToWebView(message: String) {
+    runOnUiThread {
+      webView.evaluateJavascript("console.log('$message');", null)
     }
   }
 
@@ -412,12 +441,27 @@ class MainActivity : AppCompatActivity() {
           updateOnionAddressInSettingsJson(newOnion)
 
           // Notificar a la UI
-          webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('onionAddressUpdated', { detail: '$newOnion' }));", null)
+          webView.evaluateJavascript(
+            "if (typeof window.app !== 'undefined') { " +
+            "window.app.updateOnionAddressInUI('$newOnion'); " +
+            "window.app.showToast('Onion address updated'); }",
+            null
+          )
 
           showToast("Onion address updated: $newOnion")
         } catch (e: Exception) {
           showToast("Error updating onion address: ${e.message}")
         }
+      }
+    }
+
+    @JavascriptInterface
+    fun copyToClipboard(text: String) {
+      runOnUiThread {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Onion Address", text)
+        clipboard.setPrimaryClip(clip)
+        showToast("Onion address copied to clipboard")
       }
     }
   }
@@ -489,6 +533,7 @@ class MainActivity : AppCompatActivity() {
     Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
   }
 }
+
 
 // Gestor de Tor - MEJORADO con Hidden Service
 class TorManager(private val context: android.content.Context) {

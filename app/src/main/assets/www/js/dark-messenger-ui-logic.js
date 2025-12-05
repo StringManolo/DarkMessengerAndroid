@@ -36,6 +36,8 @@ class DarkMessengerApp {
       // Iniciar verificación automática de Tor si está habilitado
       if (this.torEnabled) {
         this.startTorAutoCheck();
+        // Verificar si Tor está corriendo
+        setTimeout(() => this.checkTorStatus(), 2000);
       }
 
       // Cargar chats guardados
@@ -161,7 +163,7 @@ class DarkMessengerApp {
           document.getElementById('username').textContent = data.username;
         }
         if (data.onionAddress) {
-          document.getElementById('user-onion').textContent = data.onionAddress;
+          this.updateOnionAddressInUI(data.onionAddress);
         }
 
         // Si el usuario tiene contactos guardados, usarlos
@@ -197,6 +199,19 @@ class DarkMessengerApp {
             this.settings = defaultSettings;
           }
         }
+        
+        // Verificar si Tor está habilitado en settings por defecto
+        if (this.settings.darkmessenger && this.settings.darkmessenger.tor) {
+          const torEnabledInSettings = this.settings.darkmessenger.tor.enabled.value;
+          if (torEnabledInSettings && window.dma && dma.isTorEnabled) {
+            const currentEnabled = dma.isTorEnabled();
+            if (!currentEnabled) {
+              // Guardar el estado habilitado
+              dma.saveTorEnabled(true);
+              this.torEnabled = true;
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("Error loading settings from Kotlin:", error);
@@ -208,13 +223,13 @@ class DarkMessengerApp {
     try {
       if (window.dma && dma.isTorEnabled) {
         this.torEnabled = dma.isTorEnabled();
-
+        
         // Verificar si Tor está realmente corriendo
         if (window.dma && dma.isTorRunning) {
           const isRunning = dma.isTorRunning();
           if (this.torEnabled && !isRunning) {
-            // Tor está habilitado pero no corriendo, intentar iniciarlo
-            this.startTor();
+            // Tor está habilitado pero no corriendo
+            console.log("Tor is enabled but not running");
           } else if (!this.torEnabled && isRunning) {
             // Tor está corriendo pero no habilitado, detenerlo
             this.stopTor();
@@ -642,7 +657,7 @@ class DarkMessengerApp {
     statusDiv.className = 'tor-status';
     const onionAddress = this.userData?.onionAddress || 'placeholder.onion';
     const isCustomOnion = onionAddress !== 'placeholder.onion' && onionAddress.includes('.onion');
-
+    
     statusDiv.innerHTML = `
       <div class="status-indicator">
         <span class="status-dot ${this.torEnabled ? 'online' : 'offline'}"></span>
@@ -652,6 +667,7 @@ class DarkMessengerApp {
         <i class="fas ${isCustomOnion ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
         Onion: ${onionAddress}
         ${isCustomOnion ? ' (Generated)' : ' (Placeholder)'}
+        ${isCustomOnion ? `<br><small style="cursor: pointer; color: #2196F3;" onclick="app.copyOnionAddress('${onionAddress}')">Click to copy</small>` : ''}
       </div>
     `;
 
@@ -824,15 +840,15 @@ class DarkMessengerApp {
       // Actualizar estado de Tor si cambió
       if (this.settings.darkmessenger && this.settings.darkmessenger.tor) {
         const torEnabled = this.settings.darkmessenger.tor.enabled.value;
-
+        
         if (torEnabled !== this.torEnabled) {
           this.torEnabled = torEnabled;
-
+          
           // Guardar estado en Kotlin
           if (window.dma && dma.saveTorEnabled) {
             dma.saveTorEnabled(torEnabled);
           }
-
+          
           // Iniciar/detener Tor según corresponda
           if (torEnabled) {
             await this.startTor();
@@ -894,10 +910,10 @@ class DarkMessengerApp {
         if (success) {
           this.torEnabled = true;
           this.showToast('Tor starting...');
-
+          
           // Iniciar verificación periódica
           this.startTorAutoCheck();
-
+          
           // Actualizar UI después de un momento
           setTimeout(() => {
             if (this.currentView === 'settingsView') {
@@ -920,14 +936,14 @@ class DarkMessengerApp {
         const success = dma.stopTor();
         if (success) {
           this.torEnabled = false;
-
+          
           if (this.torCheckInterval) {
             clearInterval(this.torCheckInterval);
             this.torCheckInterval = null;
           }
-
+          
           this.showToast('Tor stopped');
-
+          
           if (this.currentView === 'settingsView') {
             this.loadSettingsUI();
           }
@@ -943,7 +959,7 @@ class DarkMessengerApp {
     if (this.torCheckInterval) {
       clearInterval(this.torCheckInterval);
     }
-
+    
     this.torCheckInterval = setInterval(() => {
       this.checkTorStatus();
       this.checkGeneratedOnionAddress();
@@ -969,7 +985,7 @@ class DarkMessengerApp {
 
   async checkGeneratedOnionAddress() {
     if (this.isCheckingOnionAddress) return;
-
+    
     this.isCheckingOnionAddress = true;
     try {
       if (window.dma && dma.getGeneratedOnionAddress) {
@@ -977,7 +993,7 @@ class DarkMessengerApp {
         if (generatedOnion && generatedOnion !== 'placeholder.onion') {
           // Actualizar en UI
           this.updateOnionAddressInUI(generatedOnion);
-
+          
           // Actualizar en settings si es diferente
           if (this.userData && this.userData.onionAddress !== generatedOnion) {
             this.updateOnionAddressInSettings(generatedOnion);
@@ -992,15 +1008,54 @@ class DarkMessengerApp {
   }
 
   updateOnionAddressInUI(newOnion) {
-    // Actualizar en sidebar
+    // Actualizar en sidebar con formato abreviado
     const userOnionElement = document.getElementById('user-onion');
     if (userOnionElement) {
-      userOnionElement.textContent = newOnion;
+      // Formatear: primeros 5 caracteres + ... + onion
+      const shortOnion = this.shortenOnionAddress(newOnion);
+      userOnionElement.textContent = shortOnion;
+      userOnionElement.setAttribute('title', newOnion); // tooltip con la dirección completa
+      userOnionElement.style.cursor = 'pointer';
+      userOnionElement.onclick = () => this.copyOnionAddress(newOnion);
     }
-
-    // Actualizar en userData
+    
+    // Actualizar en userData (guardamos la dirección completa)
     if (this.userData) {
       this.userData.onionAddress = newOnion;
+    }
+  }
+
+  shortenOnionAddress(onionAddress) {
+    if (!onionAddress || !onionAddress.includes('.onion')) {
+      return onionAddress;
+    }
+    
+    // Si es placeholder, devolver tal cual
+    if (onionAddress === 'placeholder.onion') {
+      return onionAddress;
+    }
+    
+    // Tomar los primeros 5 caracteres antes de .onion
+    const parts = onionAddress.split('.onion');
+    const domain = parts[0];
+    if (domain.length <= 5) {
+      return onionAddress;
+    }
+    return domain.substring(0, 5) + '...onion';
+  }
+
+  copyOnionAddress(onionAddress) {
+    if (window.dma && dma.copyToClipboard) {
+      dma.copyToClipboard(onionAddress);
+      this.showToast('Onion address copied to clipboard');
+    } else {
+      // Fallback: usar API del navegador
+      navigator.clipboard.writeText(onionAddress).then(() => {
+        this.showToast('Onion address copied to clipboard');
+      }).catch(err => {
+        console.error('Failed to copy: ', err);
+        this.showToast('Failed to copy onion address');
+      });
     }
   }
 
@@ -1009,13 +1064,13 @@ class DarkMessengerApp {
       if (!this.settings || !this.settings.darkmessenger) {
         return;
       }
-
+      
       // Actualizar en settings local
       if (this.settings.darkmessenger.general && 
-        this.settings.darkmessenger.general.onionAddress) {
+          this.settings.darkmessenger.general.onionAddress) {
         this.settings.darkmessenger.general.onionAddress.value = newOnion;
       }
-
+      
       // Guardar en Kotlin si es diferente del placeholder
       if (newOnion !== 'placeholder.onion') {
         if (window.dma && dma.updateOnionAddressInSettings) {
@@ -1050,7 +1105,7 @@ class DarkMessengerApp {
     // Los logs ya vienen con formato [timestamp] mensaje
     // Solo separamos timestamp del mensaje para colorear
     const timestampMatch = log.match(/^\[(\d+)\]\s+(.*)$/);
-
+    
     if (timestampMatch) {
       const timestamp = parseInt(timestampMatch[1]);
       const message = timestampMatch[2];
@@ -1060,7 +1115,7 @@ class DarkMessengerApp {
         minute: '2-digit',
         second: '2-digit'
       });
-
+      
       // Detectar tipo de mensaje para colorear
       let type = "info";
       if (message.includes("ERROR") || message.includes("err")) {
@@ -1072,13 +1127,13 @@ class DarkMessengerApp {
       } else if (message.includes("HiddenServiceDir") || message.includes(".onion")) {
         type = "success";
       }
-
+      
       return `<div class="log-entry" data-type="${type}">
                 <span class="log-time">[${timeStr}]</span> 
                 ${message}
               </div>`;
     }
-
+    
     // Si no tiene formato timestamp, devolver tal cual
     return `<div class="log-entry">${log}</div>`;
   }
@@ -1243,3 +1298,4 @@ function toggleChatInfo() { app.toggleChatInfo(); }
 function showChatMenu() { app.showChatMenu(); }
 function attachFile() { app.attachFile(); }
 function showEmojiPicker() { app.showEmojiPicker(); }
+function copyOnionAddress(onionAddress) { app.copyOnionAddress(onionAddress); }
