@@ -11,26 +11,59 @@
 - Allow users to be included into default_contacts.json if they want too
 - Add in-app updates
 - Add Tor bin build workflow for updates?
-- Add License.md, security.md, privacy.md legal.md contribute.md sponsors
+- Add License.md, faq.md, security.md, privacy.md legal.md contribute.md sponsors
 - Add option to retrieve and load keys for hidden service (export account / import account)
 
 ### UI:
 - Force Tor Checkbox Active (until other way to P2P without Tor available)
 - Hidde New Chat Button outside main menu
+- Remove extra toast from clipboard
 
 ### Right now:
-- Debug Kotlin Data using toasts to create default info.
-- Add Tor bins.
 - Launch Tor as service when app starts.
-- Check if hidden service exists (if not, create hidden service)
-- Send hidden service domain to Kotlin Data
-- Send hidden service domain to javascript to update the account data UI.
-- Make sure data is preserved locally (in app or in dom storage??? which one is better)
 - Use a MVP extendable protocol to test simple message sending and update in app
 
+### Documentation
+- Link docu and todo on readme
+- Add user basic usage guide (include in apk and display to user in webview)?
 
 ### Security:
 - Block inline to avoid xss
+- Remove port control binding by default
+- Tor security settings by default
+- Auth for tor port (add setting to manage it in case user wants to use tor for other apps)
+- Add advanced ERK crypto (update it first and improve it)
+- Settings to limit webview
+- Ship a cromite fork webview instead of using system default webview
+- Remove system previews, video recordings, etc.
+- Local encrypted database
 
 ### Paid
-- Option to multiacc. Manage / Swap / Delete multiple accounts. 
+- Option to multiacc. Manage / Swap / Delete multiple accounts. Logout/Login.
+- Pin to access app
+- Option to destroy app data.
+- Private VPN.
+- Private Tor relays. 
+- In app keyboard
+- In app videos
+- Tasks
+- Custom interface, themes, etc
+- Courses, demos and extrusive access to extra content about privacy and security
+- Block contacts
+- Allow screenshoots
+- Modal/Widget mode
+- Custom app icon
+- Voice messages (voice TTS to full privacy)
+- Block users
+- Notes
+- Cloud Storage
+- Groups
+- Autodelete if app not accesed or wrong ping X times
+- MFA
+- Notifications
+- Manage files in app (encrypted, files never touch phone storage decrypted)
+- Streaming (Videocalls)
+- Videocalls with TTS and custom camera that distort face features
+- Language translation
+- Paid messages (to recive messages, users have to pay you)
+- 24/7 Direct support
