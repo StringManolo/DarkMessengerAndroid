@@ -2,6 +2,9 @@ package com.stringmanolo.dma
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -12,9 +15,11 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.InputStream
+import java.io.*
+import java.lang.Process
+import java.util.concurrent.Executors
 
-// Data classes
+// Data classes (mantener las existentes y añadir nuevas)
 data class Contact(
   val name: String,
   val onion: String
@@ -48,6 +53,9 @@ class MainActivity : AppCompatActivity() {
   private val gson = Gson()
   private lateinit var userData: UserData
   private lateinit var defaultDataManager: DefaultDataManager
+  private lateinit var torManager: TorManager
+  private val handler = Handler(Looper.getMainLooper())
+  private val executor = Executors.newSingleThreadExecutor()
 
   @SuppressLint("SetJavaScriptEnabled")
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,7 +65,10 @@ class MainActivity : AppCompatActivity() {
     // Inicializar gestor de datos por defecto
     defaultDataManager = DefaultDataManager(this)
 
-    // Cargar datos del usuario (mezcla de guardados y por defecto)
+    // Inicializar Tor Manager
+    torManager = TorManager(this)
+
+    // Cargar datos del usuario
     loadUserData()
 
     webView = findViewById(R.id.webView)
@@ -80,7 +91,6 @@ class MainActivity : AppCompatActivity() {
 
     webView.webChromeClient = WebChromeClient()
 
-    // Cargar desde la nueva ubicación
     webView.loadUrl("file:///android_asset/www/dark-messenger-ui.html")
   }
 
@@ -92,6 +102,12 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
+  override fun onDestroy() {
+    super.onDestroy()
+    torManager.stopTor()
+    executor.shutdown()
+  }
+
   private fun loadUserData() {
     val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
 
@@ -99,7 +115,10 @@ class MainActivity : AppCompatActivity() {
     val savedOnion = sharedPref.getString("onionAddress", null)
     val savedContacts = sharedPref.getString("contacts", null)
 
-    // Cargar contactos (guardados o por defecto)
+    // Cargar estado de Tor
+    val torEnabled = sharedPref.getBoolean("tor_enabled", false)
+
+    // Cargar contactos
     val contacts = if (savedContacts != null) {
       try {
         val type = object : TypeToken<List<Contact>>() {}.type
@@ -116,6 +135,13 @@ class MainActivity : AppCompatActivity() {
       onionAddress = savedOnion ?: defaultDataManager.getDefaultOnionAddress(),
       contacts = contacts
     )
+
+    // Iniciar Tor si estaba habilitado
+    if (torEnabled) {
+      executor.execute {
+        torManager.startTor()
+      }
+    }
   }
 
   inner class WebAppInterface {
@@ -199,7 +225,7 @@ class MainActivity : AppCompatActivity() {
 
             saveUserInfoToStorage()
           } catch (e: Exception) {
-            // Ignorar error de parseo, solo guardar settings
+            // Ignorar error de parseo
           }
 
           showToast("Settings saved")
@@ -268,6 +294,56 @@ class MainActivity : AppCompatActivity() {
         }
       }
     }
+
+    // Nuevas funciones para Tor
+    @JavascriptInterface
+    fun startTor(): Boolean {
+      return try {
+        executor.execute {
+          torManager.startTor()
+        }
+        true
+      } catch (e: Exception) {
+        false
+      }
+    }
+
+    @JavascriptInterface
+    fun stopTor(): Boolean {
+      return try {
+        torManager.stopTor()
+        true
+      } catch (e: Exception) {
+        false
+      }
+    }
+
+    @JavascriptInterface
+    fun isTorRunning(): Boolean {
+      return torManager.isRunning()
+    }
+
+    @JavascriptInterface
+    fun getTorLogs(): String {
+      return gson.toJson(torManager.getLogs())
+    }
+
+    @JavascriptInterface
+    fun clearTorLogs() {
+      torManager.clearLogs()
+    }
+
+    @JavascriptInterface
+    fun saveTorEnabled(enabled: Boolean) {
+      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+      sharedPref.edit().putBoolean("tor_enabled", enabled).apply()
+    }
+
+    @JavascriptInterface
+    fun isTorEnabled(): Boolean {
+      val sharedPref = getSharedPreferences("DarkMessengerPrefs", MODE_PRIVATE)
+      return sharedPref.getBoolean("tor_enabled", false)
+    }
   }
 
   private fun saveContactsToStorage(contactsJson: String) {
@@ -290,6 +366,147 @@ class MainActivity : AppCompatActivity() {
 
   private fun showToast(message: String) {
     Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+  }
+}
+
+// Gestor de Tor
+class TorManager(private val context: android.content.Context) {
+  private var torProcess: Process? = null
+  private val logs = mutableListOf<String>()
+  private var isRunning = false
+  private val maxLogs = 1000
+
+  fun startTor(): Boolean {
+    return try {
+      // Detener si ya está corriendo
+      stopTor()
+
+      // Crear directorio para datos de Tor
+      val dataDir = File(context.filesDir, "tor_data")
+      if (!dataDir.exists()) {
+        dataDir.mkdirs()
+      }
+
+      // Copiar binario de Tor para la arquitectura correcta
+      val torBinary = copyTorBinary()
+
+      // Crear archivo torrc
+      val torrcFile = createTorrcFile(dataDir)
+
+      // Iniciar proceso
+      val command = listOf(
+        torBinary.absolutePath,
+        "-f", torrcFile.absolutePath
+      )
+
+      val processBuilder = ProcessBuilder(command)
+      .directory(dataDir)
+      .redirectErrorStream(true)
+
+      torProcess = processBuilder.start()
+      isRunning = true
+
+      // Leer logs en un hilo separado
+      Thread {
+        val reader = BufferedReader(InputStreamReader(torProcess?.inputStream))
+        var line: String?
+        while (torProcess?.isAlive == true) {
+          line = reader.readLine()
+          if (line != null) {
+            addLog("TOR: $line")
+          }
+        }
+        addLog("TOR: Process ended")
+        isRunning = false
+      }.start()
+
+      true
+    } catch (e: Exception) {
+      addLog("ERROR: ${e.message}")
+      e.printStackTrace()
+      false
+    }
+  }
+
+  fun stopTor() {
+    torProcess?.destroy()
+    torProcess = null
+    isRunning = false
+    addLog("TOR: Stopped")
+  }
+
+  fun isRunning(): Boolean = isRunning
+
+  fun getLogs(): List<String> = synchronized(logs) { logs.toList() }
+
+  fun clearLogs() = synchronized(logs) { logs.clear() }
+
+  private fun addLog(message: String) {
+    synchronized(logs) {
+      logs.add("${System.currentTimeMillis()}: $message")
+      if (logs.size > maxLogs) {
+        logs.removeAt(0)
+      }
+    }
+  }
+
+  private fun copyTorBinary(): File {
+    val abi = getABI()
+    val assetPath = "tor/$abi/tor"
+
+    val torFile = File(context.filesDir, "tor")
+
+    // Copiar desde assets
+    context.assets.open(assetPath).use { input ->
+      FileOutputStream(torFile).use { output ->
+        input.copyTo(output)
+      }
+    }
+
+    // Dar permisos de ejecución
+    torFile.setReadable(true)
+    torFile.setWritable(true, true)
+    torFile.setExecutable(true)
+
+    return torFile
+  }
+
+  private fun getABI(): String {
+    return when {
+      android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP -> {
+        android.os.Build.SUPPORTED_ABIS[0]
+      }
+      else -> android.os.Build.CPU_ABI
+    }.let { abi ->
+      when {
+        abi.contains("arm64") -> "arm64-v8a"
+        abi.contains("armeabi") -> "armeabi-v7a"
+        else -> "armeabi-v7a" // default
+      }
+    }
+  }
+
+  private fun createTorrcFile(dataDir: File): File {
+    val torrcFile = File(dataDir, "torrc")
+
+    if (!torrcFile.exists()) {
+      // Leer torrc por defecto desde assets
+      try {
+        val defaultTorrc = context.assets.open("tor/torrc.default").bufferedReader().use { it.readText() }
+        torrcFile.writeText(defaultTorrc)
+      } catch (e: Exception) {
+        // Crear torrc básico
+        torrcFile.writeText("""
+        SocksPort 9050
+        ControlPort 9051
+        DataDirectory ${dataDir.absolutePath}
+        Log notice stdout
+        AvoidDiskWrites 1
+        """.trimIndent())
+      }
+    }
+
+    return torrcFile
   }
 }
 

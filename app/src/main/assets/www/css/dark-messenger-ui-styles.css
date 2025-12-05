@@ -833,3 +833,97 @@ input:checked + .toggle-slider:before {
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+
+
+/* Debug View Styles */
+.debug-console {
+  flex: 1;
+  background: #1a1a1a;
+  color: #00ff00;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  padding: 15px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-height: 300px;
+  max-height: 500px;
+}
+
+.log-entry {
+  margin-bottom: 5px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+}
+
+.log-time {
+  color: #888;
+  font-size: 10px;
+}
+
+/* Tor Status Indicator */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background-color: #4CAF50;
+  box-shadow: 0 0 10px #4CAF50;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.offline {
+  background-color: #f44336;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.tor-control-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* Botones de estado */
+.btn-success {
+  background: #4CAF50 !important;
+  color: white !important;
+  border: none !important;
+}
+
+.btn-danger {
+  background: #f44336 !important;
+  color: white !important;
+  border: none !important;
+}
+
+.btn-info {
+  background: #2196F3 !important;
+  color: white !important;
+  border: none !important;
+}
+
+/* Asegurar que los botones se vean bien en la sección de Tor */
+.tor-control-buttons .btn {
+  flex: 1;
+  min-width: 100px;
+}

@@ -1,0 +1,5 @@
+SocksPort 9050
+ControlPort 9051
+DataDirectory /data/user/0/com.stringmanolo.dma/files/tor_data
+Log notice stdout
+AvoidDiskWrites 1

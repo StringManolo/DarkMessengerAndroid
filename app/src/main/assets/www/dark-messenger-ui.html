@@ -42,6 +42,9 @@
         <a href="javascript:void(0)" class="logout" onclick="logout()">
           <i class="fas fa-sign-out-alt"></i> Logout
         </a>
+        <a href="javascript:void(0)" onclick="showDebugView()">
+          <i class="fas fa-bug"></i> Debug
+        </a>
       </div>
     </div>
 
@@ -151,6 +154,28 @@
 
           <div class="settings-container">
             <!-- Settings will be loaded dynamically -->
+          </div>
+        </div>
+
+        <!-- Debug View -->
+        <div class="view" id="debugView">
+          <div class="view-header">
+            <button class="back-btn" onclick="showSettingsView()">
+              <i class="fas fa-arrow-left"></i>
+            </button>
+            <h2>Tor Debug Console</h2>
+            <div class="header-actions">
+              <button class="header-btn" onclick="app.refreshDebugLogs()">
+                <i class="fas fa-sync"></i>
+              </button>
+              <button class="header-btn" onclick="app.clearDebugLogs()">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="debug-console" id="debugLogs">
+            <!-- Tor logs will appear here -->
           </div>
         </div>
       </main>

@@ -28,6 +28,11 @@
         "rsa": { "value": true, "default": true, "type": "toggle" },
         "crystalKyber": { "value": true, "default": true, "type": "toggle" }
       }
+    },
+    "tor": {
+      "enabled": { "value": false, "default": false, "type": "toggle" },
+      "socksPort": { "value": 9050, "default": 9050, "type": "number" },
+      "controlPort": { "value": 9051, "default": 9051, "type": "number" }
     }
   },
   "torrc": {

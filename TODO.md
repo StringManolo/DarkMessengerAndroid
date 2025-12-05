@@ -1,6 +1,6 @@
 # TODO:
 
-List of pending changes.
+### List of pending changes:
 
 - Make all icons and media (improve icons png)
 - Make Android Interface
@@ -11,8 +11,10 @@ List of pending changes.
 - Allow users to be included into default_contacts.json if they want too
 
 
+### UI:
+- Force Tor Checkbox Active (until other way to P2P without Tor available)
 
-Right now:
+### Right now:
 - Debug Kotlin Data using toasts to create default info.
 - Add Tor bins.
 - Launch Tor as service when app starts.
@@ -23,5 +25,5 @@ Right now:
 - Use a MVP extendable protocol to test simple message sending and update in app
 
 
-Security:
+### Security:
 - Block inline to avoid xss

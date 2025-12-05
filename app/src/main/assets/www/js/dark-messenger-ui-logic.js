@@ -5,6 +5,8 @@ class DarkMessengerApp {
     this.currentChat = null;
     this.editingContactIndex = null;
     this.userData = null;
+    this.torEnabled = false;
+    this.torLogs = [];
 
     // Inicializar con estructuras vacías (se llenarán desde Kotlin)
     this.chats = [];
@@ -25,6 +27,9 @@ class DarkMessengerApp {
 
       // Cargar configuraciones desde Kotlin
       await this.loadSettings();
+
+      // Cargar estado de Tor
+      await this.loadTorStatus();
 
       // Cargar chats guardados
       await this.loadSavedChats();
@@ -50,7 +55,7 @@ class DarkMessengerApp {
     try {
       if (window.dma && dma.getDefaultData) {
         const defaultData = JSON.parse(dma.getDefaultData());
-        
+
         // Cargar contactos por defecto
         if (defaultData.contacts && defaultData.contacts.length > 0) {
           this.contacts = defaultData.contacts.map(contact => ({
@@ -60,7 +65,7 @@ class DarkMessengerApp {
             status: contact.status || "Online"
           }));
         }
-        
+
         // Si no hay contactos guardados, usar los por defecto para chats
         if (defaultData.defaultChats && defaultData.defaultChats.length > 0) {
           // Solo usar chats por defecto si no hay chats guardados
@@ -74,7 +79,7 @@ class DarkMessengerApp {
             }));
           }
         }
-        
+
         // Cargar mensajes por defecto
         if (defaultData.defaultMessages) {
           // Solo usar mensajes por defecto si no hay mensajes guardados
@@ -173,6 +178,16 @@ class DarkMessengerApp {
     }
   }
 
+  async loadTorStatus() {
+    try {
+      if (window.dma && dma.isTorEnabled) {
+        this.torEnabled = dma.isTorEnabled();
+      }
+    } catch (error) {
+      console.error("Error loading Tor status:", error);
+    }
+  }
+
   async saveChats() {
     if (window.dma && dma.saveChats) {
       try {
@@ -207,6 +222,11 @@ class DarkMessengerApp {
     if (view) {
       view.classList.add('active');
       this.currentView = viewId;
+
+      // Si es la vista de debug, cargar los logs
+      if (viewId === 'debugView') {
+        this.loadDebugLogs();
+      }
     }
   }
 
@@ -253,6 +273,11 @@ class DarkMessengerApp {
     this.loadSettingsUI();
   }
 
+  showDebugView() {
+    this.showView('debugView');
+    this.closeSidebar();
+  }
+
   showNewChat() {
     this.showContactsView('newChat');
   }
@@ -278,7 +303,7 @@ class DarkMessengerApp {
     chatsList.innerHTML = '';
 
     // Ordenar chats por timestamp (más reciente primero)
-    const sortedChats = [...this.chats].sort((a, b) => 
+    const sortedChats = [...this.chats].sort((a, b) =>
       new Date(b.timestamp) - new Date(a.timestamp)
     );
 
@@ -398,7 +423,7 @@ class DarkMessengerApp {
       };
       this.chats.push(existingChat);
       this.messages[newChatId] = [];
-      
+
       // Guardar chats y mensajes
       this.saveChats();
       this.saveMessages();
@@ -541,6 +566,10 @@ class DarkMessengerApp {
     const torrcSection = this.createSettingsSection('torrc.conf', 'torrc');
     container.appendChild(torrcSection);
 
+    // Tor Control Section
+    const torControlSection = this.createTorControlSection();
+    container.appendChild(torControlSection);
+
     // Save button
     const saveButton = document.createElement('button');
     saveButton.className = 'btn btn-primary';
@@ -581,6 +610,70 @@ class DarkMessengerApp {
     } else {
       content.innerHTML = '<p>No settings available</p>';
     }
+
+    section.appendChild(header);
+    section.appendChild(content);
+
+    return section;
+  }
+
+  createTorControlSection() {
+    const section = document.createElement('div');
+    section.className = 'settings-section';
+
+    const header = document.createElement('div');
+    header.className = 'settings-header';
+    header.onclick = (e) => {
+      const content = e.currentTarget.nextElementSibling;
+      content.classList.toggle('active');
+    };
+
+    header.innerHTML = `
+      <h3>Tor Control</h3>
+      <i class="fas fa-chevron-down"></i>
+    `;
+
+    const content = document.createElement('div');
+    content.className = 'settings-content active';
+
+    // Tor Status
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'tor-status';
+    statusDiv.innerHTML = `
+      <div class="status-indicator">
+        <span class="status-dot ${this.torEnabled ? 'online' : 'offline'}"></span>
+        <span>Tor: ${this.torEnabled ? 'Running' : 'Stopped'}</span>
+      </div>
+    `;
+
+    // Control Buttons
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'tor-control-buttons';
+    buttonContainer.style.marginTop = '10px';
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.gap = '10px';
+
+    const startButton = document.createElement('button');
+    startButton.className = 'btn btn-success';
+    startButton.innerHTML = '<i class="fas fa-play"></i> Start Tor';
+    startButton.onclick = () => this.startTor();
+
+    const stopButton = document.createElement('button');
+    stopButton.className = 'btn btn-danger';
+    stopButton.innerHTML = '<i class="fas fa-stop"></i> Stop Tor';
+    stopButton.onclick = () => this.stopTor();
+
+    const logsButton = document.createElement('button');
+    logsButton.className = 'btn btn-info';
+    logsButton.innerHTML = '<i class="fas fa-terminal"></i> View Logs';
+    logsButton.onclick = () => this.showDebugView();
+
+    buttonContainer.appendChild(startButton);
+    buttonContainer.appendChild(stopButton);
+    buttonContainer.appendChild(logsButton);
+
+    content.appendChild(statusDiv);
+    content.appendChild(buttonContainer);
 
     section.appendChild(header);
     section.appendChild(content);
@@ -706,6 +799,90 @@ class DarkMessengerApp {
         // Es una subsección
         this.updateSectionSettings(value, `${prefix}.${key}`);
       }
+    }
+  }
+
+  // Tor Control
+  async startTor() {
+    try {
+      if (window.dma && dma.startTor) {
+        const success = dma.startTor();
+        if (success) {
+          this.torEnabled = true;
+          dma.saveTorEnabled(true);
+          this.showToast('Tor started');
+          // Actualizar UI después de un momento
+          setTimeout(() => this.loadSettingsUI(), 1000);
+        } else {
+          this.showToast('Failed to start Tor');
+        }
+      }
+    } catch (error) {
+      console.error("Error starting Tor:", error);
+      this.showToast('Error starting Tor');
+    }
+  }
+
+  async stopTor() {
+    try {
+      if (window.dma && dma.stopTor) {
+        const success = dma.stopTor();
+        if (success) {
+          this.torEnabled = false;
+          dma.saveTorEnabled(false);
+          this.showToast('Tor stopped');
+          this.loadSettingsUI();
+        }
+      }
+    } catch (error) {
+      console.error("Error stopping Tor:", error);
+      this.showToast('Error stopping Tor');
+    }
+  }
+
+  // Debug View
+  async loadDebugLogs() {
+    try {
+      if (window.dma && dma.getTorLogs) {
+        const logs = JSON.parse(dma.getTorLogs());
+        const logsContainer = document.getElementById('debugLogs');
+        if (logsContainer) {
+          logsContainer.innerHTML = logs.map(log => 
+            `<div class="log-entry">${this.formatLogEntry(log)}</div>`
+          ).join('');
+          // Auto-scroll al final
+          logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+      }
+    } catch (error) {
+      console.error("Error loading Tor logs:", error);
+    }
+  }
+
+  formatLogEntry(log) {
+    // Formatear timestamp si está presente
+    const parts = log.split(': ');
+    if (parts.length > 1) {
+      const timestamp = parts[0];
+      const message = parts.slice(1).join(': ');
+      const date = new Date(parseInt(timestamp));
+      return `<span class="log-time">[${date.toLocaleTimeString()}]</span> ${message}`;
+    }
+    return log;
+  }
+
+  refreshDebugLogs() {
+    this.loadDebugLogs();
+  }
+
+  clearDebugLogs() {
+    if (window.dma && dma.clearTorLogs) {
+      dma.clearTorLogs();
+      const logsContainer = document.getElementById('debugLogs');
+      if (logsContainer) {
+        logsContainer.innerHTML = '';
+      }
+      this.showToast('Logs cleared');
     }
   }
 
@@ -837,6 +1014,7 @@ function closeSidebar() { app.closeSidebar(); }
 function showChatsView() { app.showChatsView(); }
 function showContacts() { app.showContactsView('view'); }
 function showSettings() { app.showSettingsView(); }
+function showDebugView() { app.showDebugView(); }
 function showNewChat() { app.showNewChat(); }
 function sendMessage() { app.sendMessage(); }
 function handleMessageInput(event) { app.handleMessageInput(event); }
