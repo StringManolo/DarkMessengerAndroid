@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -16,10 +15,9 @@ import com.google.gson.reflect.TypeToken
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
-import java.lang.Process
 import java.util.concurrent.Executors
 
-// Data classes (mantener las existentes y añadir nuevas)
+// Data classes (mantener las existentes)
 data class Contact(
   val name: String,
   val onion: String
@@ -369,7 +367,7 @@ class MainActivity : AppCompatActivity() {
   }
 }
 
-// Gestor de Tor
+// Gestor de Tor - CORREGIDO
 class TorManager(private val context: android.content.Context) {
   private var torProcess: Process? = null
   private val logs = mutableListOf<String>()
@@ -384,10 +382,18 @@ class TorManager(private val context: android.content.Context) {
       // Crear directorio para datos de Tor
       val dataDir = File(context.filesDir, "tor_data")
       if (!dataDir.exists()) {
-        dataDir.mkdirs()
+        val created = dataDir.mkdirs()
+        addLog("Created directory: ${dataDir.absolutePath}, success: $created")
+      } else {
+        addLog("Directory already exists: ${dataDir.absolutePath}")
       }
 
-      // Copiar binario de Tor para la arquitectura correcta
+      // Verificar permisos del directorio
+      dataDir.setReadable(true, false)
+      dataDir.setWritable(true, false)
+      dataDir.setExecutable(true, false)
+
+      // Copiar binario de Tor
       val torBinary = copyTorBinary()
 
       // Crear archivo torrc
@@ -398,6 +404,9 @@ class TorManager(private val context: android.content.Context) {
         torBinary.absolutePath,
         "-f", torrcFile.absolutePath
       )
+
+      addLog("Starting Tor with command: ${command.joinToString(" ")}")
+      addLog("Working directory: ${dataDir.absolutePath}")
 
       val processBuilder = ProcessBuilder(command)
       .directory(dataDir)
@@ -410,11 +419,15 @@ class TorManager(private val context: android.content.Context) {
       Thread {
         val reader = BufferedReader(InputStreamReader(torProcess?.inputStream))
         var line: String?
-        while (torProcess?.isAlive == true) {
-          line = reader.readLine()
-          if (line != null) {
-            addLog("TOR: $line")
+        try {
+          while (torProcess?.isAlive == true) {
+            line = reader.readLine()
+            if (line != null) {
+              addLog("TOR: $line")
+            }
           }
+        } catch (e: IOException) {
+          addLog("ERROR reading Tor output: ${e.message}")
         }
         addLog("TOR: Process ended")
         isRunning = false
@@ -422,7 +435,7 @@ class TorManager(private val context: android.content.Context) {
 
       true
     } catch (e: Exception) {
-      addLog("ERROR: ${e.message}")
+      addLog("ERROR starting Tor: ${e.message}")
       e.printStackTrace()
       false
     }
@@ -443,7 +456,9 @@ class TorManager(private val context: android.content.Context) {
 
   private fun addLog(message: String) {
     synchronized(logs) {
-      logs.add("${System.currentTimeMillis()}: $message")
+      val timestamp = System.currentTimeMillis()
+      val logEntry = "[$timestamp] $message"
+      logs.add(logEntry)
       if (logs.size > maxLogs) {
         logs.removeAt(0)
       }
@@ -454,7 +469,7 @@ class TorManager(private val context: android.content.Context) {
     val abi = getABI()
     val assetPath = "tor/$abi/tor"
 
-    val torFile = File(context.filesDir, "tor")
+    val torFile = File(context.filesDir, "tor_binary")
 
     // Copiar desde assets
     context.assets.open(assetPath).use { input ->
@@ -464,53 +479,75 @@ class TorManager(private val context: android.content.Context) {
     }
 
     // Dar permisos de ejecución
-    torFile.setReadable(true)
+    torFile.setReadable(true, false)
     torFile.setWritable(true, true)
-    torFile.setExecutable(true)
+    torFile.setExecutable(true, false)
 
+    addLog("Copied Tor binary for ABI: $abi to ${torFile.absolutePath}")
     return torFile
   }
 
   private fun getABI(): String {
-    return when {
-      android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP -> {
-        android.os.Build.SUPPORTED_ABIS[0]
-      }
-      else -> android.os.Build.CPU_ABI
-    }.let { abi ->
+    return try {
       when {
-        abi.contains("arm64") -> "arm64-v8a"
-        abi.contains("armeabi") -> "armeabi-v7a"
-        else -> "armeabi-v7a" // default
+        android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP -> {
+          android.os.Build.SUPPORTED_ABIS[0]
+        }
+        else -> android.os.Build.CPU_ABI
+      }.let { abi ->
+        when {
+          abi.contains("arm64") -> "arm64-v8a"
+          abi.contains("armeabi") -> "armeabi-v7a"
+          else -> "armeabi-v7a" // default
+        }
       }
+    } catch (e: Exception) {
+      "armeabi-v7a"
     }
   }
 
   private fun createTorrcFile(dataDir: File): File {
     val torrcFile = File(dataDir, "torrc")
 
-    if (!torrcFile.exists()) {
-      // Leer torrc por defecto desde assets
-      try {
-        val defaultTorrc = context.assets.open("tor/torrc.default").bufferedReader().use { it.readText() }
-        torrcFile.writeText(defaultTorrc)
-      } catch (e: Exception) {
-        // Crear torrc básico
-        torrcFile.writeText("""
-        SocksPort 9050
-        ControlPort 9051
-        DataDirectory ${dataDir.absolutePath}
-        Log notice stdout
-        AvoidDiskWrites 1
-        """.trimIndent())
-      }
-    }
+    // Crear torrc básico con la ruta CORRECTA
+    val torrcContent = """
+    SocksPort 9050
+    ControlPort 9051
+    DataDirectory ${dataDir.absolutePath}
+    Log notice stdout
+    AvoidDiskWrites 1
 
+    # Configuración de logging
+    Log notice file ${File(dataDir, "tor_notice.log").absolutePath}
+    Log warn file ${File(dataDir, "tor_warn.log").absolutePath}
+    Log err file ${File(dataDir, "tor_err.log").absolutePath}
+
+    # Configuración de seguridad
+    SafeLogging 1
+    SafeSocks 1
+
+    # Mejorar rendimiento en Android
+    NumEntryGuards 3
+    UseEntryGuards 1
+    NewCircuitPeriod 15
+
+    # Configuración de caché
+    MaxMemInQueues 32 MB
+    """.trimIndent()
+
+    torrcFile.writeText(torrcContent)
+
+    // Crear archivos de log
+    File(dataDir, "tor_notice.log").createNewFile()
+    File(dataDir, "tor_warn.log").createNewFile()
+    File(dataDir, "tor_err.log").createNewFile()
+
+    addLog("Created torrc file at: ${torrcFile.absolutePath}")
     return torrcFile
   }
 }
 
-// Gestor de datos por defecto
+// Mantener DefaultDataManager sin cambios (excepto para getDefaultSettingsJson)
 class DefaultDataManager(private val context: android.content.Context) {
 
   fun getAllDefaultData(): Map<String, Any> {
@@ -522,7 +559,6 @@ class DefaultDataManager(private val context: android.content.Context) {
     )
   }
 
-  // Para UserData (solo name y onion)
   fun getDefaultContacts(): List<Contact> {
     return getDefaultContactsFull().map { map ->
       Contact(
@@ -532,7 +568,6 @@ class DefaultDataManager(private val context: android.content.Context) {
     }
   }
 
-  // Para JavaScript (todos los campos)
   fun getDefaultContactsFull(): List<Map<String, Any>> {
     return try {
       val json = loadAssetFile("data/default_contacts.json")
@@ -633,15 +668,54 @@ class DefaultDataManager(private val context: android.content.Context) {
       loadAssetFile("data/default_settings.json")
     } catch (e: Exception) {
       e.printStackTrace()
-      // JSON de settings por defecto mínimo
+      // JSON de settings por defecto con Tor
       """{
         "darkmessenger": {
           "general": {
-            "username": {"value": "Anonymous", "default": "Anonymous", "type": "text"},
-            "onionAddress": {"value": "placeholder.onion", "default": "placeholder.onion", "type": "text"}
+            "username": {"value": null, "default": null, "type": "text"},
+            "onionAddress": {"value": "placeholder.onion", "default": "placeholder.onion", "type": "text"},
+            "allowAddMe": {"value": true, "default": true, "type": "toggle"},
+            "addBack": {"value": true, "default": true, "type": "toggle"},
+            "alertOnNewMessages": {"value": true, "default": true, "type": "toggle"},
+            "checkNewMessagesSeconds": {"value": 20, "default": 20, "type": "number"},
+            "verbose": {"value": true, "default": true, "type": "toggle"},
+            "debug": {"value": true, "default": true, "type": "toggle"},
+            "debugWithTime": {"value": true, "default": true, "type": "toggle"}
+          },
+          "cryptography": {
+            "useERK": {"value": false, "default": false, "type": "toggle"},
+            "offlineMessages": {
+              "ecies": {"value": true, "default": true, "type": "toggle"},
+              "rsa": {"value": true, "default": true, "type": "toggle"},
+              "crystalKyber": {"value": true, "default": true, "type": "toggle"}
+            },
+            "onlineMessages": {
+              "ecies": {"value": true, "default": true, "type": "toggle"},
+              "rsa": {"value": true, "default": true, "type": "toggle"},
+              "crystalKyber": {"value": true, "default": true, "type": "toggle"}
+            },
+            "addMe": {
+              "ecies": {"value": true, "default": true, "type": "toggle"},
+              "rsa": {"value": true, "default": true, "type": "toggle"},
+              "crystalKyber": {"value": true, "default": true, "type": "toggle"}
+            }
+          },
+          "tor": {
+            "enabled": {"value": false, "default": false, "type": "toggle"},
+            "socksPort": {"value": 9050, "default": 9050, "type": "number"},
+            "controlPort": {"value": 9051, "default": 9051, "type": "number"}
           }
         },
-        "torrc": {}
+        "torrc": {
+          "torPort": {"value": 9050, "default": 9050, "type": "number"},
+          "hiddenServicePort": {"value": 9001, "default": 9001, "type": "number"},
+          "logNoticeFile": {"value": "./logs/notices.log", "default": "./logs/notices.log", "type": "text"},
+          "controlPort": {"value": 9051, "default": 9051, "type": "number"},
+          "hashedControlPassword": {"value": false, "default": false, "type": "toggle"},
+          "orPort": {"value": 0, "default": 0, "type": "number"},
+          "disableNetwork": {"value": 0, "default": 0, "type": "number"},
+          "avoidDiskWrites": {"value": 1, "default": 1, "type": "number"}
+        }
       }"""
     }
   }

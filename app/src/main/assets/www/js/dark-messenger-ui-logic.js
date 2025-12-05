@@ -859,16 +859,41 @@ class DarkMessengerApp {
     }
   }
 
+
+  
   formatLogEntry(log) {
-    // Formatear timestamp si está presente
-    const parts = log.split(': ');
-    if (parts.length > 1) {
-      const timestamp = parts[0];
-      const message = parts.slice(1).join(': ');
-      const date = new Date(parseInt(timestamp));
-      return `<span class="log-time">[${date.toLocaleTimeString()}]</span> ${message}`;
+    // Los logs ya vienen con formato [timestamp] mensaje
+    // Solo separamos timestamp del mensaje para colorear
+    const timestampMatch = log.match(/^\[(\d+)\]\s+(.*)$/);
+
+    if (timestampMatch) {
+      const timestamp = parseInt(timestampMatch[1]);
+      const message = timestampMatch[2];
+      const date = new Date(timestamp);
+      const timeStr = date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      // Detectar tipo de mensaje para colorear
+      let type = "info";
+      if (message.includes("ERROR") || message.includes("err")) {
+        type = "error";
+      } else if (message.includes("WARN") || message.includes("warn")) {
+        type = "warning";
+      } else if (message.includes("notice") || message.includes("Notice")) {
+        type = "success";
+      }
+
+      return `<div class="log-entry" data-type="${type}">
+              <span class="log-time">[${timeStr}]</span> 
+              ${message}
+            </div>`;
     }
-    return log;
+
+    // Si no tiene formato timestamp, devolver tal cual
+    return `<div class="log-entry">${log}</div>`;
   }
 
   refreshDebugLogs() {
