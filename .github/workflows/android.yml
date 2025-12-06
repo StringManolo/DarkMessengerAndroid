@@ -3,9 +3,9 @@ name: Android Native CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "feature/hidden-service-http-server" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "feature/hidden-service-http-server" ]
   create:
     tags:
       - 'v*' 
