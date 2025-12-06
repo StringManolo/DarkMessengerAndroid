@@ -16,6 +16,15 @@ class DarkMessengerApp {
     this.messages = {};
     this.settings = {};
 
+    // Exponer métodos globalmente para llamadas desde Kotlin
+    window.handleIncomingMessage = (chatId, senderName, message) => {
+      this.handleIncomingMessage(chatId, senderName, message);
+    };
+    
+    window.handleNewContact = (contactName, contactOnion) => {
+      this.handleNewContact(contactName, contactOnion);
+    };
+
     this.init();
   }
 
@@ -704,10 +713,35 @@ class DarkMessengerApp {
       this.loadSettingsUI();
     };
 
+    // Test buttons (solo en desarrollo)
+    const testMessageButton = document.createElement('button');
+    testMessageButton.className = 'btn btn-secondary';
+    testMessageButton.innerHTML = '<i class="fas fa-comment"></i> Test Message';
+    testMessageButton.onclick = () => {
+      if (window.dma && dma.testIncomingMessage) {
+        dma.testIncomingMessage();
+      }
+    };
+
+    const testContactButton = document.createElement('button');
+    testContactButton.className = 'btn btn-secondary';
+    testContactButton.innerHTML = '<i class="fas fa-user-plus"></i> Test Contact';
+    testContactButton.onclick = () => {
+      if (window.dma && dma.testIncomingContact) {
+        dma.testIncomingContact();
+      }
+    };
+
     buttonContainer.appendChild(startButton);
     buttonContainer.appendChild(stopButton);
     buttonContainer.appendChild(logsButton);
     buttonContainer.appendChild(refreshButton);
+    
+    // Solo mostrar botones de test en desarrollo
+    if (window.dma && dma.testIncomingMessage) {
+      buttonContainer.appendChild(testMessageButton);
+      buttonContainer.appendChild(testContactButton);
+    }
 
     content.appendChild(statusDiv);
     content.appendChild(buttonContainer);
@@ -1082,6 +1116,158 @@ class DarkMessengerApp {
     }
   }
 
+  // Message Handling Methods
+  handleIncomingMessage(chatId, senderName, message) {
+    console.log(`Incoming message in chat ${chatId} from ${senderName}: ${message}`);
+    
+    // Buscar si el chat está activo
+    if (this.currentChat === chatId && this.currentView === 'chatView') {
+      // Añadir mensaje a la vista actual
+      this.addMessageToCurrentChat(message, true, senderName);
+    } else {
+      // Marcar chat como no leído
+      const chat = this.chats.find(c => c.id === chatId);
+      if (chat) {
+        chat.unread = true;
+        chat.lastMessage = message.length > 30 ? message.substring(0, 30) + '...' : message;
+        chat.timestamp = new Date().toISOString();
+        
+        // Actualizar lista de chats si estamos en esa vista
+        if (this.currentView === 'chatsView') {
+          this.loadChats();
+        }
+        
+        // Mostrar notificación
+        this.showToast(`New message from ${senderName}`);
+      } else {
+        // Crear nuevo chat si no existe
+        this.createNewChatFromIncomingMessage(chatId, senderName, message);
+      }
+    }
+    
+    // Guardar mensaje en almacenamiento
+    this.saveIncomingMessageToStorage(chatId, senderName, message);
+  }
+
+  addMessageToCurrentChat(message, incoming = true, senderName = null) {
+    const messageObj = {
+      id: Date.now(),
+      senderId: incoming ? (senderName ? senderName.hashCode() : null) : null,
+      text: message,
+      timestamp: new Date().toISOString(),
+      incoming: incoming
+    };
+
+    if (!this.messages[this.currentChat]) {
+      this.messages[this.currentChat] = [];
+    }
+
+    this.messages[this.currentChat].push(messageObj);
+    this.loadMessages(this.currentChat);
+    
+    // Actualizar último mensaje en el chat
+    const chat = this.chats.find(c => c.id === this.currentChat);
+    if (chat) {
+      chat.lastMessage = message.length > 30 ? message.substring(0, 30) + '...' : message;
+      chat.timestamp = new Date().toISOString();
+      chat.unread = false;
+    }
+    
+    // Guardar cambios
+    this.saveChats();
+    this.saveMessages();
+  }
+
+  createNewChatFromIncomingMessage(chatId, senderName, message) {
+    // Buscar contacto por nombre
+    const contact = this.contacts.find(c => c.name === senderName);
+    if (!contact) {
+      console.warn(`Contact ${senderName} not found, creating temporary contact`);
+      
+      // Crear contacto temporal
+      const newContact = {
+        id: Math.max(...this.contacts.map(c => c.id), -1) + 1,
+        name: senderName,
+        onion: 'unknown.onion',
+        status: "Online"
+      };
+      
+      this.contacts.push(newContact);
+      this.saveContactsToKotlin();
+    }
+
+    // Crear nuevo chat
+    const newChat = {
+      id: chatId,
+      contactId: contact ? contact.id : senderName.hashCode(),
+      lastMessage: message.length > 30 ? message.substring(0, 30) + '...' : message,
+      timestamp: new Date().toISOString(),
+      unread: true
+    };
+    
+    this.chats.push(newChat);
+    
+    // Crear entrada de mensajes para este chat
+    this.messages[chatId] = [{
+      id: Date.now(),
+      senderId: contact ? contact.id : senderName.hashCode(),
+      text: message,
+      timestamp: new Date().toISOString(),
+      incoming: true
+    }];
+    
+    // Guardar
+    this.saveChats();
+    this.saveMessages();
+    
+    // Actualizar UI
+    if (this.currentView === 'chatsView') {
+      this.loadChats();
+    }
+    
+    this.showToast(`New message from ${senderName}`);
+  }
+
+  saveIncomingMessageToStorage(chatId, senderName, message) {
+    // Esto ya se maneja en saveMessages()
+    this.saveMessages();
+  }
+
+  // Contact Handling Methods
+  handleNewContact(contactName, contactOnion) {
+    console.log(`New contact added remotely: ${contactName} (${contactOnion})`);
+    
+    // Verificar si el contacto ya existe
+    const existingContact = this.contacts.find(c => 
+      c.name === contactName || c.onion === contactOnion
+    );
+    
+    if (existingContact) {
+      this.showToast(`Contact ${contactName} already exists`);
+      return;
+    }
+    
+    // Añadir nuevo contacto
+    const newContact = {
+      id: Math.max(...this.contacts.map(c => c.id), -1) + 1,
+      name: contactName,
+      onion: contactOnion,
+      status: "Online"
+    };
+    
+    this.contacts.push(newContact);
+    
+    // Guardar en Kotlin
+    this.saveContactsToKotlin();
+    
+    // Actualizar UI
+    if (this.currentView === 'contactsView') {
+      this.loadContacts();
+    }
+    
+    this.showToast(`New contact added: ${contactName}`);
+  }
+
   // Debug View Methods
   async loadDebugLogs() {
     try {
@@ -1126,6 +1312,8 @@ class DarkMessengerApp {
         type = "success";
       } else if (message.includes("HiddenServiceDir") || message.includes(".onion")) {
         type = "success";
+      } else if (message.includes("starting") || message.includes("Starting")) {
+        type = "success";
       }
       
       return `<div class="log-entry" data-type="${type}">
@@ -1153,7 +1341,7 @@ class DarkMessengerApp {
     }
   }
 
-  // Message Handling
+  // Message Sending
   sendMessage() {
     const input = document.getElementById('messageInput');
     const text = input.value.trim();
