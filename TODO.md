@@ -14,6 +14,10 @@
 - Add License.md, faq.md, security.md, privacy.md legal.md contribute.md sponsors
 - Add option to retrieve and load keys for hidden service (export account / import account)
 
+### CLI:
+- Make a simple curl bash cli client to develop the http hidden service api.
+- Path frontend once hidden service is done
+
 ### UI:
 - Force Tor Checkbox Active (until other way to P2P without Tor available)
 - Hidde New Chat Button outside main menu
