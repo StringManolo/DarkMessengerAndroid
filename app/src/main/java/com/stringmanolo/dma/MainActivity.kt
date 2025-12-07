@@ -228,7 +228,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun addLogToWebView(message: String) {
+    fun addLogToWebView(message: String) {
         runOnUiThread {
             webView.evaluateJavascript("console.log('$message');", null)
         }
@@ -423,7 +423,7 @@ class MainActivity : AppCompatActivity() {
             
             chatMessages.add(mapOf(
                 "id" to message.id,
-                "senderId" to message.senderId,
+                "senderId" to (message.senderId ?: -1),
                 "text" to message.text,
                 "timestamp" to message.timestamp,
                 "incoming" to message.incoming
@@ -518,6 +518,32 @@ class MainActivity : AppCompatActivity() {
             }
         """, null)
     }
+
+
+    // FIXED: Add missing method that TorManager calls
+    fun notifyNewOnionAddress(onionAddress: String) {
+        runOnUiThread {
+            // Update the onion address in user data
+            userData = userData.copy(onionAddress = onionAddress)
+            
+            // Update in settings
+            updateOnionAddressInSettingsJson(onionAddress)
+            
+            // Save user info
+            saveUserInfoToStorage()
+            
+            // Notify the WebView
+            webView.evaluateJavascript(
+                "if (typeof window.app !== 'undefined') { " +
+                "window.app.updateOnionAddressInUI('$onionAddress'); " +
+                "window.app.showToast('New onion address generated'); }",
+                null
+            )
+            
+            showToast("New onion address: $onionAddress")
+        }
+    }
+
 
     fun startHiddenServiceServer(): Boolean {
         return try {

@@ -288,13 +288,12 @@ class TorManager(private val context: Context, private val mainActivity: MainAct
 
     private fun notifyOnionAddressGenerated(onionAddress: String) {
         try {
-            // Usar un handler para ejecutar en el hilo principal
             Handler(Looper.getMainLooper()).post {
-                // Enviar evento a la WebView
                 mainActivity.notifyNewOnionAddress(onionAddress)
             }
         } catch (e: Exception) {
             addLog("ERROR notifying onion address: ${e.message}")
         }
     }
+
 }

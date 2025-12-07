@@ -41,12 +41,11 @@ class HiddenServiceServer(
         val headers = session.headers
         val origin = headers["origin"] ?: "*"
         
-        val responseHeaders = mapOf(
-            "Access-Control-Allow-Origin" to origin,
-            "Access-Control-Allow-Methods" to ALLOWED_METHODS,
-            "Access-Control-Allow-Headers" to "Content-Type",
-            "Access-Control-Allow-Credentials" to "true"
-        )
+        val responseHeaders = mutableMapOf<String, String>()
+        responseHeaders["Access-Control-Allow-Origin"] = origin
+        responseHeaders["Access-Control-Allow-Methods"] = ALLOWED_METHODS
+        responseHeaders["Access-Control-Allow-Headers"] = "Content-Type"
+        responseHeaders["Access-Control-Allow-Credentials"] = "true" 
 
         // Manejar preflight OPTIONS
         if (method == Method.OPTIONS) {
