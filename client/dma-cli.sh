@@ -48,15 +48,63 @@ add() {
   debug "Testing if alias is a valid format ..."
   if ! [[ "$alias" =~ ^[a-zA-Z0-9_.@-]{1,99}$ ]]; then
     error "Alias can only use alphanumeric characters and be 1 to 99 characters long\nThis characters are also allowed: - _ . @"
-    exit
+    exit 1
   fi
 
   debug "Testing if onion address is valid ..."
   if ! [[ "$address" =~ ^([a-z2-7]{16}|[a-z2-7]{56})\.onion$ ]]; then
     error "The onion address is not valid. Make sure you adding a real address"
+    exit 1
   fi
 
-  debug "Add implementation is not finished yet"
+  local list_file="./address_book/list.txt"
+  local addressBook=()
+  
+  debug "Reading $list_file ..."
+  if [[ -f "$list_file" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line=$(echo "$line" | tr -d '\r')
+      if [[ -n "$line" ]]; then
+        addressBook+=("$line")
+      fi
+    done < "$list_file"
+  fi
+  
+  debug "A total of ${#addressBook[@]} contacts found in your addresses list"
+  
+  # Check for duplicates to prevent username spoofing
+  debug "Checking for duplicate aliases ..."
+  for entry in "${addressBook[@]}"; do
+    local auxAlias=$(echo "$entry" | cut -d' ' -f1)
+    if [[ "$auxAlias" == "$alias" ]]; then
+      error "Alias \"$alias\" already exists, use a different alias"
+      exit 1
+    fi
+  done
+
+  debug "Adding new entry to in-memory address book ..."
+  addressBook+=("$alias $address")
+  
+  debug "Removing all duplicates (if there is any) ..."
+  # Use associative array to remove duplicates while preserving order
+  declare -A seen
+  local uniqueEntries=()
+  for entry in "${addressBook[@]}"; do
+    if [[ -z "${seen[$entry]}" ]]; then
+      uniqueEntries+=("$entry")
+      seen["$entry"]=1
+    fi
+  done
+
+  debug "Writing to $list_file ..."
+  # Create directory if it doesn't exist
+  mkdir -p "$(dirname "$list_file")"
+  
+  # Write all entries to file
+  printf "%s\n" "${uniqueEntries[@]}" > "$list_file"
+  
+  echo "Added to your address book"
+  debug "Done"
 }
 
 : << 'TODO'
